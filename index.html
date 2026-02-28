@@ -1,0 +1,3307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Varispeed Retuner</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #121212;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            height: auto;
+            overflow-y: auto;
+            padding-top: 60px;
+            padding-bottom: 120px;
+        }
+
+        #drop-zone {
+            width: 99%;
+            height: 150px;
+            border: 2px dashed #444;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.3s, border-color 0.3s;
+            cursor: pointer;
+            z-index: 10;
+            background: rgba(18, 18, 18, 0.95);
+            margin-bottom: 20px;
+        }
+
+        #drop-zone.hover {
+            border-color: #00d2ff;
+            background-color: rgba(0, 210, 255, 0.1);
+        }
+
+        #processing-container {
+            width: 99%;
+            display: none;
+            margin-bottom: 20px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            background-color: #333;
+            border-radius: 5px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background-color: #00d2ff;
+            width: 0%;
+            transition: width 0.1s;
+        }
+
+        canvas {
+            background-color: #080808;
+            border: 1px solid #333;
+            box-shadow: 0 0 30px rgba(0,0,0,0.7);
+            border-radius: 4px;
+            max-width: 99%;
+        }
+
+        .controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 30px;
+            font-size: 1.05rem;
+        }
+
+        #status { font-weight: bold; color: #fff; }
+
+        #file-list {
+            width: 99%;
+            margin-bottom: 15px;
+            max-height: 150px;
+            overflow-y: auto;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 5px;
+            padding: 10px;
+        }
+        .file-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px 10px;
+            border-bottom: 1px solid #333;
+            font-size: 1.05rem;
+        }
+        .file-row:last-child { border-bottom: none; }
+        .file-info { display: flex; align-items: center; gap: 10px; }
+        .color-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+        .file-controls { display: flex; gap: 10px; }
+        .btn-mini {
+            background: #333; border: 1px solid #555; color: #fff;
+            cursor: pointer; font-size: 1.1rem; padding: 2px 8px; border-radius: 3px;
+        }
+        .btn-mini:hover { background: #555; }
+        /* Update drop zone to look active even when hidden (if we want) or just keep it */
+    
+        /* Proof Modal Styles */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.85); backdrop-filter: blur(2px); }
+        .modal-content { background-color: #1a1a1a; margin: 5% auto; padding: 25px; border: 1px solid #444; width: 85%; max-height: 80vh; overflow-y: auto; border-radius: 8px; box-shadow: 0 0 50px rgba(0,0,0,0.7); }
+        .close-btn { color: #ff4444; position: sticky; top: -10px; float: right; font-size: 28px; font-weight: bold; cursor: pointer; transition: 0.2s; z-index: 1000; background: rgba(26,26,26,0.95); padding: 0 10px; border-radius: 8px; border: 1px solid #444; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        .close-btn:hover { color: #fff; transform: scale(1.1); }
+        
+        table.proof-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-family: 'Segoe UI Mono', monospace; font-size: 1rem; color: #ddd; }
+        .proof-table th, .proof-table td { border: 1px solid #333; padding: 10px; text-align: center; }
+        .proof-table th { background-color: #252525; color: #fff; position: sticky; top: 0; border-bottom: 2px solid #555; }
+        .proof-table tr:nth-child(even) { background-color: #1f1f1f; }
+        .proof-table tr:hover { background-color: #2a2a2a; border: 1px solid #555; }
+        
+        .raw-data-box { background: #111; padding: 15px; border: 1px solid #333; overflow-x: auto; color: #00ff41; font-family: monospace; font-size: 1.1rem; margin-top: 5px; border-radius: 4px; }
+        .section-header { color: #00d2ff; margin-top: 20px; border-bottom: 1px solid #333; padding-bottom: 5px; }
+    
+        
+        /* V38 Timeline Styles (Split-Zone Fix) */
+        #timeline-wrapper {
+            width: 99%;
+            margin-bottom: 20px;
+            position: relative;
+            height: 100px; /* Taller for better control */
+            background: #000;
+            border: 1px solid #333;
+            border-radius: 4px;
+            overflow: hidden; /* Keep canvas contained */
+        }
+        #wave-canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            max-width: 100%; /* FIX: Overrides global 99% canvas limit */
+            border: none;    /* FIX: Removes phantom internal border line */
+            box-shadow: none; /* FIX: Removes internal shadow clashing with wrapper */
+            z-index: 0;
+            opacity: 0.8;
+        }
+        
+        /* ZONE 1: Scrubber (Bottom 70%) */
+        #seek-slider {
+            position: absolute;
+            bottom: 0; left: -1px;
+            width: calc(100% + 2px); 
+            height: 70%; /* Only takes up bottom part for clicking */
+            z-index: 10;
+            -webkit-appearance: none;
+            background: transparent;
+            margin: 0;
+            cursor: crosshair;
+        }
+        
+        /* V39 Neon Playhead Style */
+        #seek-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 100px; /* Full height coverage */
+            width: 2px;    /* Thin precision line */
+            background: #00d2ff; /* Cyan color */
+            box-shadow: 0 0 10px #00d2ff, 0 0 4px #fff; /* Glowing effect */
+            cursor: crosshair;
+            margin-top: -30px; /* Vertical centering adjustment */
+            position: relative; 
+            z-index: 10;
+            border: none;
+        }
+        #seek-slider::-moz-range-thumb {
+            height: 100px;
+            width: 2px;
+            background: #00d2ff;
+            box-shadow: 0 0 10px #00d2ff;
+            cursor: crosshair;
+            border: none;
+            border-radius: 0;
+        }
+
+
+        /* ZONE 2: Range Selectors (Top 30%) */
+        .range-slider {
+            position: absolute;
+            top: 0; left: -8px;
+            width: calc(100% + 16px); 
+            height: 30%; /* Only takes up top part for clicking */
+            z-index: 20; /* Higher than seek slider */
+            -webkit-appearance: none;
+            background: transparent;
+            pointer-events: none; /* Allow clicking through empty space? No, logic below */
+            margin: 0;
+        }
+        
+        /* Webkit Thumb Styling (Chrome/Edge/Safari) */
+        .range-slider::-webkit-slider-thumb {
+            pointer-events: auto; /* Catch clicks on the thumb */
+            -webkit-appearance: none;
+            height: 25px; 
+            width: 16px;
+            cursor: ew-resize;
+            border-radius: 0 0 4px 4px;
+            border: 1px solid #000;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+        
+        /* Firefox Thumb Styling */
+        .range-slider::-moz-range-thumb {
+            pointer-events: auto;
+            height: 25px; 
+            width: 16px;
+            cursor: ew-resize;
+            border-radius: 0 0 4px 4px;
+            border: 1px solid #000;
+        }
+
+        #range-start::-webkit-slider-thumb { background: #00ff41; transform: translateX(8px); border-radius: 0 4px 4px 4px; }
+        #range-end::-webkit-slider-thumb { background: #ff4444; transform: translateX(-8px); border-radius: 4px 0 4px 4px; }
+        #range-start::-moz-range-thumb { background: #00ff41; transform: translateX(8px); border-radius: 0 4px 4px 4px; }
+        #range-end::-moz-range-thumb { background: #ff4444; transform: translateX(-8px); border-radius: 4px 0 4px 4px; }
+        
+        /* To allow clicking through the empty parts of the range sliders to hit the Seek bar below,
+           we actually rely on the height split. The Range inputs are physically only at the top. */
+
+        /* Visual Highlight Region */
+        
+
+
+
+        /* V40 Layout Adjustments */
+        #drop-zone, #processing-container, #file-list, #calibration-panel, #timeline-wrapper {
+            width: 99%; /* Stretched from 80% */
+        }
+        
+        /* Fix Playhead Height */
+        #seek-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 105px; /* Taller than container to ensure coverage */
+            width: 2px;
+            background: #00d2ff;
+            box-shadow: 0 0 10px #00d2ff, 0 0 4px #fff;
+            cursor: crosshair;
+            /* Center the thumb vertically relative to the 70% height input */
+            /* Input is ~70px. Thumb is 105px. We need to shift it up to cover the gap. */
+            margin-top: -35px; 
+            position: relative; 
+            z-index: 10;
+            border: none;
+        }
+        #seek-slider::-moz-range-thumb {
+            height: 105px;
+            width: 2px;
+            background: #00d2ff;
+            box-shadow: 0 0 10px #00d2ff;
+            cursor: crosshair;
+            border: none;
+            border-radius: 0;
+            transform: translateY(-15px); /* Firefox adjustment */
+        }
+
+
+        /* V41 Layout & Spotlight Styles */
+        body {
+            width: 100%;
+            padding: 60px 0 120px 0;
+            overflow-x: hidden; /* Prevent horiz scroll */
+        }
+        
+        #drop-zone, #processing-container, #file-list, #calibration-panel, #timeline-wrapper {
+            width: 99%; /* Max width */
+        }
+
+        /* V41 Spotlight Overlay */
+        #region-highlight {
+            position: absolute;
+            top: 0; 
+            left: 0; 
+            width: 100%; /* Covers full timeline */
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+            /* Default background (will be updated by JS) */
+            background: linear-gradient(to right, 
+                rgba(0,0,0,0) 0%, 
+                rgba(0,0,0,0) 100%);
+        }
+
+
+        /* Remove arrows/spinners from numeric inputs */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    
+
+        /* V71 Timeline Centering Fixes */
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+        #timeline-wrapper {
+            width: 100%;
+        }
+    
+        /* V73 MODERN UI/UX OVERRIDES */
+        body {
+            background: radial-gradient(circle at 50% -10%, #2a2a3d, #121212);
+            background-attachment: fixed;
+            font-size: 16px;
+        }
+        
+        #drop-zone {
+            height: 220px;
+            border-width: 3px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            background: rgba(30, 30, 40, 0.8);
+            backdrop-filter: blur(5px);
+        }
+        #drop-zone h2 {
+            font-size: 2.2rem;
+            margin-bottom: 5px;
+            text-shadow: 0 2px 10px rgba(0, 210, 255, 0.3);
+        }
+        
+        .btn-mini {
+            padding: 10px 20px;
+            font-size: 1.05rem;
+            border-radius: 8px;
+            transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .btn-mini:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+            filter: brightness(1.2);
+        }
+        .btn-mini:active {
+            transform: translateY(0);
+        }
+        
+        #calibration-panel {
+            background: rgba(26, 26, 32, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid #444;
+            box-shadow: 0 12px 35px rgba(0,0,0,0.6);
+            padding: 12px 20px;
+        }
+        
+        /* Large Digital Readouts for Values */
+        #val-cents, #val-speed, #val-semi {
+            font-size: 1.4rem;
+            padding: 0;
+            margin: 0;
+            height: 1.6rem;
+            text-shadow: 0 0 10px rgba(255,255,255,0.2);
+        }
+        
+        /* Bigger Timeline Text */
+        #time-cur, #time-dur {
+            font-size: 1.4rem;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+        #label-start, #label-end {
+            font-size: 1.1rem;
+            font-weight: bold;
+        }
+        
+        /* Enhanced Top Controls */
+        .controls {
+            gap: 15px;
+        }
+    </style>
+    
+
+
+    <!-- Export Media Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+    <script src="https://unpkg.com/mp4-muxer/build/mp4-muxer.js"></script>
+    <script src="https://unpkg.com/webm-muxer/build/webm-muxer.js"></script>
+</head>
+<body>
+
+    <div id="drop-zone">
+        <h2>Drag & Drop Audio File Anywhere</h2>
+        <span style="color:#777; font-size: 1.05em; margin-bottom: 15px; display: block;">(WAV, MP3, WEBM, MP4)</span>
+        <div style="display:flex; gap:20px; align-items:center;">
+            <button style="padding: 12px 32px; font-size: 1.2rem; background: #222; color: #00d2ff; border: 2px solid #00d2ff; border-radius: 30px; box-shadow: 0 4px 15px rgba(0, 210, 255, 0.2); cursor: pointer; font-weight: bold; transition: all 0.2s;" onmouseover="this.style.background='#00d2ff'; this.style.color='#000';" onmouseout="this.style.background='#222'; this.style.color='#00d2ff';">📁 Browse for File</button>
+            <label onclick="event.stopPropagation();" style="display:flex; align-items:center; gap:8px; color:#aaa; font-size:1.1rem; cursor:pointer; font-weight:bold; background: rgba(34,34,34,0.6); padding: 8px 15px; border-radius: 20px; border: 1px solid #444;" title="Automatically map the file upon import using the current Freq filter">
+                <input type="checkbox" id="auto-map-toggle" autocomplete="off" style="cursor:pointer; transform: scale(1.2);">
+                Auto-Map
+            </label>
+        </div>
+    </div>
+
+
+    <div id="processing-container">
+        <div id="status">Initializing...</div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+    </div>
+
+    <div id="file-list" style="display:none;"></div>
+
+    
+    <div id="calibration-panel" style="background:#1a1a1a; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #333; width: 99%; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+        <div style="display:grid; grid-template-columns: 1fr auto 1fr; align-items:center; margin-bottom:10px; gap:10px;">
+            <div style="display:flex; gap:5px;"></div>
+            <div style="display:flex; gap:10px; justify-content:center;">
+                <div style="display:flex; align-items:center; gap:5px; background:#222; padding:3px 8px; border-radius:4px; border:1px solid #444;" title="Filter analyzed frequencies">
+                <span id="freq-label" style="color:#00d2ff; font-size:1.05rem; font-weight:bold; transition: color 0.1s;">Freq:</span>
+                <input type="number" id="freq-min" value="20" oninput="updateFreqPreview()" style="width:65px; background:#111; color:#00d2ff; border:1px solid #555; border-radius:3px; text-align:center; font-weight:bold; outline:none; font-size:1.05rem;" title="Minimum Hz">
+                <span style="color:#aaa; font-weight:bold;">-</span>
+                <input type="number" id="freq-max" value="22050" oninput="updateFreqPreview()" style="width:75px; background:#111; color:#00d2ff; border:1px solid #555; border-radius:3px; text-align:center; font-weight:bold; outline:none; font-size:1.05rem;" title="Maximum Hz">
+                <span style="color:#aaa; font-size: 1rem; margin-right:5px;">Hz</span>
+                <select id="freq-filter" onchange="updateFreqInputs()" style="background:#111; color:#aaa; border:1px solid #555; border-radius:3px; outline:none; cursor:pointer; font-size: 1rem; padding:4px;">
+                    <option value="" disabled selected>Quick Presets...</option>
+                    <option value="20,22050">All Range</option>
+                    <option value="20,250">Bass Only</option>
+                    <option value="250,4000">Mids/Vocals</option>
+                    <option value="4000,22050">Highs/Air</option>
+                </select>
+            </div>
+            <button id="btn-map" class="btn-mini" onclick="mapSelectedRange()" style="padding:4px 12px; background:#ff8800; color:#000; font-weight:bold; transition:0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'" title="Map the selected A/B region">🗺️ Map Range</button>
+                <button class="btn-mini" onclick="undoMap()" style="padding:4px 12px; background:#333;" title="Undo"><span style="font-size: 1.4em; vertical-align: middle; line-height: 0; display: inline-block; transform: translateY(-1px);">↶</span> Undo</button>
+                <button class="btn-mini" onclick="redoMap()" style="padding:4px 12px; background:#333;" title="Redo"><span style="font-size: 1.4em; vertical-align: middle; line-height: 0; display: inline-block; transform: translateY(-1px);">↷</span> Redo</button>
+                <button class="btn-mini" onclick="resetMapRange()" style="padding:4px 12px; background:#444;" title="Reset">Reset</button>
+                <button id="btn-play" class="btn-mini" onclick="togglePlayback()" style="padding:4px 12px; background:#00d2ff; color:#000; font-weight:bold;">▶ Play</button>
+            </div>
+            <div style="text-align: right;"></div>
+        </div>
+        
+        
+        
+    <!-- V37 Advanced Timeline -->
+    <div style="width:100%; display:flex; justify-content:space-between; margin-bottom:5px; font-family:'Segoe UI Mono', monospace; font-size: 1.1rem; color:#888;">
+        <span id="label-start" style="color:#00ff41;">Start: 0.00s</span>
+        <span id="label-end" style="color:#ff4444;">End: End</span>
+    </div>
+
+    <div id="timeline-wrapper">
+        <canvas id="wave-canvas"></canvas>
+        <div id="region-highlight" style="left:0%; width:100%;"></div>
+        
+        <!-- Scrubber -->
+        <input type="range" id="seek-slider" autocomplete="off" min="0" max="100" value="0" step="0.01" oninput="onSeekInput(this.value)" onchange="onSeekRelease(this.value)">
+        
+        <!-- Range Selectors -->
+        <input type="range" id="range-start" class="range-slider" autocomplete="off" min="0" max="100" value="0" step="0.1" oninput="updateRegion('start')">
+        <input type="range" id="range-end" class="range-slider" autocomplete="off" min="0" max="100" value="100" step="0.1" oninput="updateRegion('end')">
+    </div>
+    
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:5px; width:100%;">
+         <span id="time-cur" style="font-family:'Segoe UI Mono', monospace; color:#fff; font-size: 1.05rem; font-weight:bold;">0:00</span>
+         <span style="flex:1;"></span>
+         <span id="time-dur" style="font-family:'Segoe UI Mono', monospace; color:#666; font-size: 1.05rem;">0:00</span>
+    </div>
+
+        
+        
+        <!-- CT Adjusters Toggle Window -->
+        <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer; background:#222; padding:8px 15px; border-radius:5px; border:1px solid #444; margin-bottom: 10px; transition: 0.2s;" 
+             onclick="const c=document.getElementById('ct-adjusters-container'); const isHidden=c.style.display==='none'; c.style.display=isHidden?'block':'none'; this.querySelector('.toggle-icon').innerText=isHidden?'▼ HIDE':'▶ SHOW';"
+             onmouseover="this.style.background='#333'" onmouseout="this.style.background='#222'">
+            <span style="font-weight:bold; color:#00d2ff; font-family:'Segoe UI Mono', monospace; font-size:1.1rem; letter-spacing:1px;">🎛️ PITCH / SPEED ADJUSTERS</span>
+            <span class="toggle-icon" style="color:#aaa; font-weight:bold; font-size:1.1rem;">▼ HIDE</span>
+        </div>
+        <div id="ct-adjusters-container" style="display: block;">
+<!-- V15 Dual Sliders (V34 Vertical Layout) -->
+        <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:10px;">
+            <!-- Coarse Section -->
+            <div style="width:100%;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                    <div style="font-size: 1rem; font-weight:bold; letter-spacing:1px; color:#888; font-family:'Segoe UI Mono', monospace;">COARSE (±1200 ct)</div>
+                    <div style="display:flex; gap:6px;">
+                        <button class="btn-mini" onclick="undoShift()" style="padding:4px 12px; background:#333;" title="Undo"><span style="font-size: 1.4em; vertical-align: middle; line-height: 0; display: inline-block; transform: translateY(-1px);">↶</span> Undo</button>
+                        <button class="btn-mini" onclick="redoShift()" style="padding:4px 12px; background:#333;" title="Redo"><span style="font-size: 1.4em; vertical-align: middle; line-height: 0; display: inline-block; transform: translateY(-1px);">↷</span> Redo</button>
+                        <button class="btn-mini" onclick="resetCalibration()" style="padding:4px 12px; background:#444;" title="Reset">Reset</button>
+                    </div>
+                </div>
+                <input type="range" id="cal-slider" autocomplete="off" min="-1200" max="1200" value="0" step="1" 
+                       oninput="updateCalibration()" onchange="saveShiftHistory()"
+                       style="width:100%; cursor:pointer; height:24px; margin:0; display:block;">
+            </div>
+            
+            <!-- Fine Section -->
+            <div style="width:100%;">
+                <div style="font-size: 1rem; font-weight:bold; letter-spacing:1px; color:#888; font-family:'Segoe UI Mono', monospace; margin-bottom:0px;">FINE (±5 ct)</div>
+                <input type="range" id="fine-slider" autocomplete="off" min="-5" max="5" value="0" step="0.0001" 
+                       oninput="updateCalibration()" onchange="saveShiftHistory()"
+                       style="width:100%; cursor:pointer; height:24px; margin:0; display:block;">
+            </div>
+        </div>
+        <!-- End V15 Sliders -->
+        
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; text-align:center; font-family:'Segoe UI Mono', monospace;">
+            <div style="background:#1b1b22; padding:6px 5px; border-radius:6px; box-shadow: inset 0 3px 8px rgba(0,0,0,0.6); border: 1px solid #333; display:flex; flex-direction:column; justify-content:center;">
+                <div style="color:#888; font-size: 1rem; font-weight:bold; letter-spacing:1px; margin-bottom: 2px;">OFFSET (CENTS)</div>
+                <input type="number" id="val-cents" step="0.0001" value="0" oninput="manualSync('cents')" onchange="saveShiftHistory()" style="background:transparent; border:none; color:#fff; font-weight:bold; font-family:inherit; text-align:center; width:100%; outline:none;">
+            </div>
+            <div style="background:#1b1b22; padding:6px 5px; border-radius:6px; box-shadow: inset 0 3px 8px rgba(0,0,0,0.6); border: 1px solid #333; display:flex; flex-direction:column; justify-content:center;" title="Note: Varispeed transformation alters tempo to preserve acoustic purity.">
+                <div style="color:#888; font-size: 1rem; font-weight:bold; letter-spacing:1px; margin-bottom: 2px;">SPEED %</div>
+                <input type="number" id="val-speed" step="0.0001" value="0" oninput="manualSync('speed')" onchange="saveShiftHistory()" style="background:transparent; border:none; color:#fff; font-weight:bold; font-family:inherit; text-align:center; width:100%; outline:none;">
+            </div>
+            <div style="background:#1b1b22; padding:6px 5px; border-radius:6px; box-shadow: inset 0 3px 8px rgba(0,0,0,0.6); border: 1px solid #333; display:flex; flex-direction:column; justify-content:center;">
+                <div style="color:#888; font-size: 1rem; font-weight:bold; letter-spacing:1px; margin-bottom: 2px;">PITCH SHIFT</div>
+                <input type="number" id="val-semi" step="0.0001" value="0" oninput="manualSync('semi')" onchange="saveShiftHistory()" style="background:transparent; border:none; color:#fff; font-weight:bold; font-family:inherit; text-align:center; width:100%; outline:none;">
+            </div>
+        </div>
+        </div>
+        <!-- End CT Adjusters Toggle Window -->
+        
+        <!-- V94: Dynamic Alignment Meters -->
+        <div id="alignment-meters-container" style="margin-top: 15px; background: #1b1b22; padding: 10px; border-radius: 10px; border: 1px solid #333; box-shadow: inset 0 3px 8px rgba(0,0,0,0.6); display: none;">
+            <!-- Meters injected by JS -->
+        </div>
+
+    </div>
+
+    <canvas id="pcpCanvas"></canvas>
+    
+
+
+    
+    
+    
+    <div class="controls" style="flex-wrap: wrap; justify-content: center; gap: 10px; max-width: 90%; margin-bottom: 10px;">
+        
+        
+        
+        <!-- V28 Added Slider -->
+        <div style="display:flex; align-items:center; gap:5px; background:#222; padding:3px 8px; border-radius:4px; border:1px solid #444;">
+            <span style="font-size: 1.1rem; font-weight:bold; letter-spacing:1px; color:#aaa;">Smooth Lvl:</span>
+            <input type="range" id="smooth-slider" autocomplete="off" min="0" max="80" value="0" oninput="updateSmoothingLevel(this.value)" style="width:200px; height:10px; cursor:pointer;">
+            <span id="smooth-val" style="font-size: 1.1rem; font-weight:bold; letter-spacing:1px; color:#777; font-weight:bold; min-width:20px; text-align:right;">OFF</span>
+        </div>
+        <!-- V31 Zoom Slider -->
+        <div style="display:flex; align-items:center; gap:5px; background:#222; padding:3px 8px; border-radius:4px; border:1px solid #444;">
+            <span style="font-size: 1.1rem; font-weight:bold; letter-spacing:1px; color:#aaa;">🔍 Zoom:</span>
+            <input type="range" id="zoom-slider" autocomplete="off" min="1" max="10" step="0.1" value="1" oninput="updateZoomFromSlider(this.value)" style="width:100px; height:10px; cursor:pointer;">
+            <span id="zoom-val" style="font-size: 1.1rem; font-weight:bold; letter-spacing:1px; color:#00d2ff; font-weight:bold; min-width:25px; text-align:right;">1.0x</span>
+        </div>
+
+        <!-- V49 Peak Toggle -->
+        <label style="display:flex; align-items:center; gap:5px; background:#222; padding:3px 8px; border-radius:4px; border:1px solid #444; cursor:pointer;">
+            <input type="checkbox" id="peak-toggle" autocomplete="off" onchange="togglePeakLines(this.checked)" style="cursor:pointer;" checked>
+            <span style="font-size: 1.1rem; font-weight:bold; letter-spacing:1px; color:#aaa;">Show Peaks</span>
+        </label>
+
+        <!-- V80 Shift All Toggle -->
+        <label style="display:flex; align-items:center; gap:5px; background:#222; padding:3px 8px; border-radius:4px; border:1px solid #444; cursor:pointer;">
+            <input type="checkbox" id="shift-all-toggle" autocomplete="off" onchange="renderGraph()" style="cursor:pointer;" checked>
+            <span style="font-size: 1.1rem; font-weight:bold; letter-spacing:1px; color:#aaa;">Shift All</span>
+        </label>
+
+
+        
+        <!-- Export & Proof Buttons (Grouped to prevent teleporting) -->
+        <div style="display:flex; gap:10px;">
+            <button class="btn-mini" onclick="openExportModal()" style="padding: 5px 15px; background:#444; border:1px solid #666; font-weight:bold; color:#00d2ff; box-shadow: 0 0 5px rgba(0, 210, 255, 0.3);">💾 Export Media</button>
+            <button class="btn-mini" onclick="toggleProofModal()"  style="padding: 5px 15px; background:#444; border:1px solid #666; font-weight:bold;">📜 Tuning Proof / Data</button>
+        </div>
+        
+        <!-- Flex Break to force Grids & Dropdown onto a new isolated line -->
+        <div style="flex-basis: 100%; height: 0; margin: 0;"></div>
+        
+        <!-- Tuning Toggles Container -->
+        <div id="tuning-controls" style="display:flex; gap:5px; align-items:center; background:#1a1a1a; padding:5px; border-radius:4px; border:1px solid #333; flex-wrap:wrap; justify-content:center;">
+            <!-- Buttons injected via JS -->
+        </div>
+
+        <!-- Microtonal Root Note Selector -->
+        <div id="root-note-container" style="display:none; align-items:center; gap:5px; background:#222; padding:3px 8px; border-radius:4px; border:1px solid #444;">
+            <span style="font-size: 1.1rem; font-weight:bold; letter-spacing:1px; color:#aaa;" title="Pythagorean & Just Intonation are relative to the Key of the song.">
+                Key / Root:
+            </span>
+            <select id="root-note-select" autocomplete="off" onchange="updateRootNote()" style="background:#111; color:#00d2ff; border:1px solid #555; font-weight:bold; padding:2px 5px; border-radius:3px; outline:none; cursor:pointer;">
+                <option value="0">C</option>
+                <option value="1">C#</option>
+                <option value="2">D</option>
+                <option value="3">D# / Eb</option>
+                <option value="4">E</option>
+                <option value="5">F</option>
+                <option value="6">F#</option>
+                <option value="7">G</option>
+                <option value="8">G# / Ab</option>
+                <option value="9">A</option>
+                <option value="10">A# / Bb</option>
+                <option value="11">B</option>
+            </select>
+        </div>
+    </div>
+    </div>
+
+<script>
+    
+    
+    // --- V4 HYBRID ENGINE ---
+    // --- V37 Time-Sliced Data Engine ---
+    const TIME_SLICE_RES = 10; // Slices per second (0.1s resolution)
+    let loopStartPct = 0;
+    let loopEndPct = 100;
+
+    let calibrationCents = 0; // PATCH V11: Calibration State
+    
+    // PATCH V14: Audio Playback State
+    let globalAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let currentAudioBuffer = null; 
+    let activeSourceNode = null;   
+    let isPlaying = false;
+    
+    // V14 Timeline State
+    let playbackStartTime = 0;
+    let playbackOffset = 0;
+    let playbackRate = 1.0;
+    let isDraggingSeek = false;
+    let rafId = null;
+    
+    // let isSmoothing = true; // Removed v30
+    let smoothingPasses = 0; // V28 Slider State
+    
+    // --- PATCH 3: SPLIT UNDO/REDO ENGINES ---
+    let shiftHistoryStack =[];
+    let shiftHistoryIdx = -1;
+    
+
+    window.saveShiftHistory = () => {
+        const currentCents = calibrationCents;
+        if (shiftHistoryIdx >= 0 && shiftHistoryStack[shiftHistoryIdx] === currentCents) return;
+        shiftHistoryStack = shiftHistoryStack.slice(0, shiftHistoryIdx + 1);
+        shiftHistoryStack.push(currentCents);
+        shiftHistoryIdx++;
+    };
+
+    window.undoShift = () => {
+        if (shiftHistoryIdx > 0) {
+            shiftHistoryIdx--;
+            applyShiftState(shiftHistoryStack[shiftHistoryIdx]);
+        }
+    };
+
+    window.redoShift = () => {
+        if (shiftHistoryIdx < shiftHistoryStack.length - 1) {
+            shiftHistoryIdx++;
+            applyShiftState(shiftHistoryStack[shiftHistoryIdx]);
+        }
+    };
+
+    function applyShiftState(cents) {
+        calibrationCents = cents;
+        const coarse = Math.round(calibrationCents);
+        const fine = calibrationCents - coarse;
+        document.getElementById('cal-slider').value = coarse;
+        document.getElementById('fine-slider').value = fine;
+        
+        document.getElementById('val-cents').value = calibrationCents.toFixed(4);
+        const ratio = Math.pow(2, calibrationCents / 1200);
+        document.getElementById('val-speed').value = ((ratio - 1) * 100).toFixed(4);
+        document.getElementById('val-semi').value = (calibrationCents / 100).toFixed(4);
+        
+        if (activeSourceNode && isPlaying) {
+            activeSourceNode.playbackRate.value = ratio;
+            playbackRate = ratio;
+        }
+        renderGraph();
+    }
+
+    window.saveMapHistory = () => {
+        const activeFileIdx = filesData.findIndex(f => f.buffer === currentAudioBuffer);
+        if (activeFileIdx === -1) return;
+        const file = filesData[activeFileIdx];
+        
+        if (!file.mapHistoryStack) file.mapHistoryStack =[];
+        if (file.mapHistoryIdx === undefined) file.mapHistoryIdx = -1;
+
+        const snapshot = {
+            data: new Float32Array(file.data),
+            mappedSlices: new Uint16Array(file.mappedSlices),
+            _hasMapped: file._hasMapped,
+            temporalData: file.temporalData ? file.temporalData.map(slice => new Float32Array(slice)) : null
+        };
+
+        file.mapHistoryStack = file.mapHistoryStack.slice(0, file.mapHistoryIdx + 1);
+        file.mapHistoryStack.push(snapshot);
+        if (file.mapHistoryStack.length > 15) {
+            file.mapHistoryStack.shift();
+        } else {
+            file.mapHistoryIdx++;
+        }
+    };
+
+    window.undoMap = () => {
+        const activeFileIdx = filesData.findIndex(f => f.buffer === currentAudioBuffer);
+        if (activeFileIdx === -1) return;
+        const file = filesData[activeFileIdx];
+        
+        if (file.mapHistoryIdx > 0) {
+            file.mapHistoryIdx--;
+            applyMapState(file.mapHistoryStack[file.mapHistoryIdx], file);
+        }
+    };
+
+    window.redoMap = () => {
+        const activeFileIdx = filesData.findIndex(f => f.buffer === currentAudioBuffer);
+        if (activeFileIdx === -1) return;
+        const file = filesData[activeFileIdx];
+        
+        if (file.mapHistoryStack && file.mapHistoryIdx < file.mapHistoryStack.length - 1) {
+            file.mapHistoryIdx++;
+            applyMapState(file.mapHistoryStack[file.mapHistoryIdx], file);
+        }
+    };
+
+    function applyMapState(state, file) {
+        file.data = new Float32Array(state.data);
+        file.mappedSlices = new Uint16Array(state.mappedSlices);
+        file._hasMapped = state._hasMapped;
+        if (state.temporalData) {
+            file.temporalData = state.temporalData.map(slice => new Float32Array(slice));
+        }
+        if (currentAudioBuffer === file.buffer) drawWaveform(currentAudioBuffer);
+        recalculateGraphRegion();
+    }
+
+    window.resetMapRange = () => {
+        const activeFileIdx = filesData.findIndex(f => f.buffer === currentAudioBuffer);
+        if(activeFileIdx === -1) return;
+        const file = filesData[activeFileIdx];
+        
+        const globalSum = new Float32Array(TOTAL_PCP_BINS);
+        for(let t=0; t<file.temporalData.length; t++) {
+            file.temporalData[t].fill(0); // FIX: Clear previous temporal data to prevent ghost waves
+            for(let b=0; b<TOTAL_PCP_BINS; b++) {
+                globalSum[b] += file.temporalData[t][b];
+            }
+        }
+        file.data = globalSum;
+        file.mappedSlices.fill(0); 
+        file._hasMapped = false;
+        
+        drawWaveform(file.buffer);
+        renderGraph();
+        saveMapHistory();
+    };
+    
+
+    // Circular Smoothing Algorithm (Blends 'W' shapes into single peaks)
+    function getSmoothed(data) {
+        const passes = smoothingPasses;
+        let output = new Float32Array(data);
+        let temp = new Float32Array(data.length);
+        const len = data.length;
+        
+        for(let p=0; p<passes; p++) {
+            for(let i=0; i<len; i++) {
+                // Circular indexing to handle edge cases
+                let prev = output[(i - 1 + len) % len];
+                let curr = output[i];
+                let next = output[(i + 1) % len];
+                temp[i] = (prev + curr + next) / 3;
+            }
+            output.set(temp);
+        }
+        return output;
+    }
+    // ------------------------
+
+    
+    
+    // --- V6 MICROTONAL ENGINE ---
+    
+    // Pythagorean Tuning (Current Key)
+    // C=0.00, C#=113.69, D=203.91, Eb=294.13, E=407.82, F=498.04, F#=611.73, G=701.96, G#=815.64, A=905.87, Bb=996.09, B=1109.78
+    // Base Intervals (Root = 0)
+    const basePythIntervals = [
+         0.00, 113.69, 203.91, 294.13, 407.82, 498.04, 611.73, 701.96, 815.64, 905.87, 996.09, 1109.78
+    ];
+
+    const baseJustIntervals = [
+         0.00, 111.73, 203.91, 315.64, 386.31, 498.04, 590.22, 701.96, 813.69, 884.36, 1017.60, 1088.27
+    ];
+
+    // Mutable current offsets initialized to C
+    let pythOffsets = [...basePythIntervals];
+    let justOffsets = [...baseJustIntervals];
+
+    window.updateRootNote = () => {
+        const rootSelect = document.getElementById('root-note-select');
+        if (!rootSelect) return;
+        const rootIndex = parseInt(rootSelect.value);
+        
+        let newPyth = new Array(12);
+        let newJust = new Array(12);
+        
+        for(let i = 0; i < 12; i++) {
+            // Calculate absolute distance from chosen root based on pitch degree
+            let degree = (i - rootIndex + 12) % 12;
+            newPyth[i] = basePythIntervals[degree];
+            newJust[i] = baseJustIntervals[degree];
+        }
+        
+        // Update global arrays (keeps proof table raw data accurate)
+        pythOffsets = newPyth;
+        justOffsets = newJust;
+        
+        // Update the active tuning standards
+        const pythStandard = tuningStandards.find(t => t.id === 'pyth');
+        const renoldStandard = tuningStandards.find(t => t.id === 'renold');
+        
+        if (pythStandard) pythStandard.offsets = pythOffsets;
+        if (renoldStandard) renoldStandard.offsets = justOffsets;
+        
+        // Render new alignments
+        if (typeof renderGraph === 'function') renderGraph();
+        
+        // Update the Proof of Tuning modal if it is open
+        const modal = document.getElementById('proof-modal');
+        const container = document.getElementById('proof-table-container');
+        if(modal && modal.style.display === 'block' && container) {
+            generateProofTable(container);
+        }
+    };
+
+    const tuningStandards = [
+        // 1. ISO (Equal Temperament) - The Standard Ruler
+        { id: 'iso',    name: "ISO Standard (440 Hz)",     hz: 440.00, color: "#00d2ff", visible: true,  dash: [], type: 'tet' },
+        
+        // 2. Verdi (Equal Temperament) - Standard 432
+        { id: 'verdi',  name: "Verdi / Grant (432 Hz TET)", hz: 432.00, color: "#00ff41", visible: true,  dash: [5,5], type: 'tet' },
+        
+        // 3. Pythagorean (Unequal) - True Harmonic Stacking
+        { id: 'pyth',   name: "Pythagorean (C=256 / A=432)",  hz: 432.00, color: "#ffe600", visible: false, dash: [8,2], type: 'custom', offsets: pythOffsets },
+        
+        // 4. Maria Renold (Just Intonation) - C=256 / A=426.7
+        { id: 'renold', name: "Just Intonation (C=259.2 / A=432)", hz: 432.00, color: "#ff8800", visible: false, dash: [2,4], type: 'custom', offsets: justOffsets },
+        
+        // 5. Scientific (TET) - C=256 / A=430.5
+        { id: 'sci',    name: "Scientific (C=256 TET)",    hz: 430.54, color: "#ff00ff", visible: false, dash: [2,2], type: 'tet' }
+    ];
+    
+    // -----------------------------
+    const dropZone = document.getElementById('drop-zone');
+    
+    
+    const processingContainer = document.getElementById('processing-container');
+    const statusDiv = document.getElementById('status');
+    const progressFill = document.getElementById('progressFill');
+    const canvas = document.getElementById('pcpCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // --- V31 ZOOM & PAN ENGINE ---
+    let zoomLevel = 1.0;
+    let showPeakLines = true;
+    window.togglePeakLines = (val) => { showPeakLines = val; renderGraph(); };
+    let panOffset = 0;
+    let isPanning = false;
+    let lastMouseX = 0;
+    
+    // Zoom Slider Handler
+    window.updateZoomFromSlider = (val) => {
+        const newZoom = parseFloat(val);
+        // Center zoom on screen center roughly if using slider
+        const centerW = canvas.width / 2;
+        const worldPoint = (centerW + panOffset) / zoomLevel;
+        
+        zoomLevel = newZoom;
+        document.getElementById('zoom-val').innerText = zoomLevel.toFixed(1) + "x";
+        
+        // Re-center
+        panOffset = (worldPoint * zoomLevel) - centerW;
+        clampPan();
+        renderGraph();
+    }
+
+    // Mouse Wheel Zoom
+    canvas.addEventListener('wheel', (e) => {
+        // Allow page scroll if fully zoomed out/in and scrolling in that direction
+        if (zoomLevel <= 1 && e.deltaY > 0) return;
+        if (zoomLevel >= 20 && e.deltaY < 0) return;
+        e.preventDefault();
+        const zoomSpeed = 0.001;
+        const rect = canvas.getBoundingClientRect();
+        
+        // Calculate mouse X relative to canvas drawing buffer
+        const scaleX = canvas.width / rect.width;
+        const mouseX = (e.clientX - rect.left) * scaleX;
+
+        // Calculate the "World" point under the mouse before zooming
+        const worldPoint = (mouseX + panOffset) / zoomLevel;
+
+        // Apply Zoom
+        zoomLevel += e.deltaY * -zoomSpeed * (zoomLevel / 2); // Logarithmic-ish feel
+        if (zoomLevel < 1) zoomLevel = 1;
+        if (zoomLevel > 20) zoomLevel = 20;
+
+        // Calculate new Pan so the world point remains under mouse
+        panOffset = (worldPoint * zoomLevel) - mouseX;
+        
+        clampPan();
+        
+        // Sync UI
+        document.getElementById('zoom-slider').value = zoomLevel;
+        document.getElementById('zoom-val').innerText = zoomLevel.toFixed(1) + "x";
+        
+        renderGraph();
+    }, { passive: false });
+
+    // Panning - Mouse Down
+    canvas.addEventListener('mousedown', (e) => {
+        if(zoomLevel > 1) {
+            isPanning = true;
+            lastMouseX = e.clientX;
+            canvas.style.cursor = 'grabbing';
+        }
+    });
+
+    // Panning - Mouse Move
+    window.addEventListener('mousemove', (e) => {
+        if (!isPanning) return;
+        e.preventDefault();
+        
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        
+        const delta = (e.clientX - lastMouseX) * scaleX;
+        lastMouseX = e.clientX;
+
+        panOffset -= delta;
+        clampPan();
+        renderGraph();
+    });
+
+    // Panning - Mouse Up/Leave
+    window.addEventListener('mouseup', () => { isPanning = false; canvas.style.cursor = 'default'; });
+    
+    function clampPan() {
+        const maxPan = (canvas.width * zoomLevel) - canvas.width;
+        if (panOffset < 0) panOffset = 0;
+        if (panOffset > maxPan) panOffset = maxPan;
+        if (zoomLevel === 1) panOffset = 0;
+    }
+    // -----------------------------
+
+
+    // Canvas Resolution
+    canvas.width = 1800;
+    canvas.height = 500;
+
+    // --- High Accuracy Configuration ---
+    // FFT Size: Higher = more precise frequency detection, less time precision.
+    // For a cumulative map, we want max Frequency precision.
+    const FFT_SIZE = 65536; // FORENSIC GRADE (High Precision) 
+    const HOP_SIZE = 4096; // Fixed: strictly <= sampleRate / TIME_SLICE_RES to prevent empty slices
+    
+    // PCP Resolution: 1200 cents (100 bins per semitone)
+    const BINS_PER_SEMITONE = 50; // Reverted to 50 for stability (v28)
+
+    const TOTAL_PCP_BINS = 12 * BINS_PER_SEMITONE;
+    const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+    // State: Array of { name: str, data: Float32Array, color: str, visible: bool }
+    let filesData = [];
+
+    // HSL Color generator for distinct lines
+    function getColor(index) {
+        const hue = (index * 137.508) % 360; // Golden angle approx
+        return `hsl(${hue}, 70%, 60%)`;
+    }
+
+
+    // --- Drag & Drop Handlers ---
+    // Make entire window a drop zone
+    window.addEventListener('dragover', (e) => { 
+        e.preventDefault(); 
+        dropZone.classList.add('hover'); 
+    });
+    
+    window.addEventListener('dragleave', (e) => { 
+        // Prevent flickering when dragging over child nodes; only trigger when leaving the browser window
+        if (!e.relatedTarget || e.relatedTarget.nodeName === "HTML") {
+            dropZone.classList.remove('hover'); 
+        }
+    });
+    
+    // --- FILE QUEUE SYSTEM ---
+    window.fileQueue = [];
+    window.isProcessingQueue = false;
+
+    window.processNextInQueue = () => {
+        if (window.fileQueue.length === 0) {
+            window.isProcessingQueue = false;
+            return;
+        }
+        window.isProcessingQueue = true;
+        const file = window.fileQueue.shift();
+        
+        // Update UI to show how many are left in the queue
+        const remaining = window.fileQueue.length;
+        document.getElementById('status').textContent = `Decoding ${file.name}... ${remaining > 0 ? '(' + remaining + ' more queued)' : ''}`;
+        
+        processFile(file);
+    };
+
+    window.queueFiles = (files) => {
+        for (let i = 0; i < files.length; i++) {
+            window.fileQueue.push(files[i]);
+        }
+        if (!window.isProcessingQueue) {
+            window.processNextInQueue();
+        } else {
+            // Update UI live if dropping files WHILE already processing
+            const statusDiv = document.getElementById('status');
+            if (statusDiv.textContent.includes('queued')) {
+                statusDiv.textContent = statusDiv.textContent.replace(/\(\d+ more queued\)/, `(${window.fileQueue.length} more queued)`);
+            } else {
+                statusDiv.textContent += ` (${window.fileQueue.length} more queued)`;
+            }
+        }
+    };
+
+    window.addEventListener('drop', (e) => {
+        if (e.target && e.target.type === 'file') return;
+        e.preventDefault();
+        dropZone.classList.remove('hover');
+        if (e.dataTransfer.files.length) window.queueFiles(e.dataTransfer.files);
+    });
+    
+    dropZone.addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.type = 'file'; 
+        input.accept = 'audio/*, video/*';
+        input.multiple = true; // NEW: Enable multi-selection in file browser
+        input.onchange = e => { 
+            if (e.target.files.length) window.queueFiles(e.target.files); 
+        };
+        input.click();
+    });
+
+    
+    
+    async function processFile(file) {
+        dropZone.style.display = 'none';
+        processingContainer.style.display = 'block';
+        statusDiv.textContent = `Decoding ${file.name}...`;
+        progressFill.style.width = '0%';
+        
+        const audioCtx = globalAudioCtx;
+        
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+            
+            if(globalAudioCtx.state === 'suspended') globalAudioCtx.resume();
+            
+            // New Analysis: Store Time Slices
+            // New Workflow: Defer analysis until user selects range
+            const totalSeconds = audioBuffer.duration;
+            const numChunks = Math.ceil(totalSeconds * TIME_SLICE_RES);
+            const temporalData = new Array(numChunks);
+            for(let i=0; i<numChunks; i++) temporalData[i] = new Float32Array(TOTAL_PCP_BINS);
+            const mappedSlices = new Uint16Array(numChunks);
+            mappedSlices.fill(0); // PATCH 1: Start unmapped initially so it doesn't look fully processed
+            finishAnalysis(temporalData, file.name, audioBuffer, mappedSlices);
+
+        } catch (err) {
+            statusDiv.textContent = "Error decoding file. " + err;
+            console.error(err);
+            // Wait 3 seconds so the user can read the error, then continue queue or reset UI
+            setTimeout(() => {
+                window.isProcessingQueue = false; // BUGFIX: Release the lock on failure!
+                if (window.fileQueue && window.fileQueue.length > 0) {
+                    window.processNextInQueue();
+                } else {
+                    dropZone.style.display = 'flex';
+                    processingContainer.style.display = 'none';
+            }
+            }, 3000);
+        }
+    }
+
+
+
+    
+    // [Removed deprecated analyzeBufferOffline() function to prevent scope crashes]
+
+    
+    window.updateFreqPreview = () => {
+        const minIn = document.getElementById('freq-min');
+        const maxIn = document.getElementById('freq-max');
+        const label = document.getElementById('freq-label');
+        if(!minIn || !maxIn || !label) return;
+
+        let minF = parseFloat(minIn.value) || 20;
+        let maxF = parseFloat(maxIn.value) || 22050;
+
+        // Visual logic identical to the mapping math
+        if (minF <= 20 && maxF >= 22000) {
+            label.style.color = '#00d2ff'; // Cyan for Full Range
+        } else {
+            // V133: Expanded bounds (0 to 192,000 Hz)
+            let safeMin = Math.max(0, Math.min(minF, maxF));
+            let safeMax = Math.min(192000, Math.max(minF, maxF));
+            
+            // Math.max(1) prevents log2(0) from crashing into -Infinity if the user types 0
+            let centerFreq = Math.max(1, Math.sqrt(safeMin * safeMax));
+            let logCenter = Math.log2(centerFreq);
+            let hue = Math.floor(((logCenter - 4.32) / 10.1) * 280);
+            
+            if(hue < 0) hue = 0;
+            if(hue > 360) hue = 360;
+            
+            let color = `hsl(${hue}, 100%, 50%)`;
+            label.style.color = color;
+        }
+    };
+
+    window.updateFreqInputs = () => {
+        const freqFilter = document.getElementById('freq-filter');
+        if(!freqFilter || !freqFilter.value) return;
+        const vals = freqFilter.value.split(',');
+        const minIn = document.getElementById('freq-min');
+        const maxIn = document.getElementById('freq-max');
+        if(minIn) minIn.value = vals[0];
+        if(maxIn) maxIn.value = vals[1];
+        freqFilter.selectedIndex = 0; // Reset dropdown to placeholder
+        
+        updateFreqPreview(); // Trigger color change instantly
+    };
+    
+    // Ensure it glows correctly on page load
+    window.addEventListener('load', () => {
+        // Force Reset Frequency Map Inputs
+        const freqMin = document.getElementById('freq-min');
+        if (freqMin) freqMin.value = 20;
+        const freqMax = document.getElementById('freq-max');
+        if (freqMax) freqMax.value = 22050;
+        const freqFilter = document.getElementById('freq-filter');
+        if (freqFilter) freqFilter.selectedIndex = 0;
+        if (typeof updateFreqPreview === 'function') updateFreqPreview();
+ if(window.updateFreqPreview) updateFreqPreview(); });
+    
+
+    window.mapSelectedRange = async () => {
+        const activeFileIdx = filesData.findIndex(f => f.buffer === currentAudioBuffer);
+        if(activeFileIdx === -1) {
+            alert("No active audio file to map.");
+            return;
+        }
+        
+        const btnMap = document.getElementById('btn-map');
+        if (btnMap) btnMap.disabled = true;
+
+        const file = filesData[activeFileIdx];
+        const buffer = file.buffer;
+
+        dropZone.style.display = 'none';
+        processingContainer.style.display = 'block';
+        statusDiv.textContent = `Mapping Selected Range: ${file.name}...`;
+        progressFill.style.width = '0%';
+
+        const sampleRate = buffer.sampleRate;
+        const numChannels = buffer.numberOfChannels;
+        const channels =[];
+        for(let c=0; c<numChannels; c++) channels.push(buffer.getChannelData(c));
+
+        const startSec = (loopStartPct / 100) * buffer.duration;
+        const endSec = (loopEndPct / 100) * buffer.duration;
+        let offset = Math.floor(startSec * sampleRate);
+        const endSample = Math.floor(endSec * sampleRate);
+        const totalToProcess = endSample - offset;
+        const initialOffset = offset;
+        const totalSamples = buffer.length;
+
+        if (totalToProcess <= 0) {
+            processingContainer.style.display = 'none';
+            dropZone.style.display = 'flex';
+            if (btnMap) btnMap.disabled = false;
+            return;
+        }
+
+        const windowTable = new Float32Array(FFT_SIZE);
+        for(let i=0; i<FFT_SIZE; i++) {
+            windowTable[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (FFT_SIZE - 1)));
+        }
+
+        const real = new Float32Array(FFT_SIZE);
+        const imag = new Float32Array(FFT_SIZE);
+
+        const minInput = document.getElementById('freq-min');
+        const maxInput = document.getElementById('freq-max');
+        let minF = minInput ? parseFloat(minInput.value) || 20 : 20;
+        let maxF = maxInput ? parseFloat(maxInput.value) || 22050 : 22050;
+
+        // V131: Enforce Limits (Clamping) & Auto-Flip backwards inputs
+        // V133: Expanded Limits (Clamping) & Auto-Flip backwards inputs
+        if (minF < 0) minF = 0;
+        if (maxF > 192000) maxF = 192000;
+        if (minF > maxF) { 
+            let temp = minF; 
+            minF = maxF; 
+            maxF = temp; 
+        }
+        
+        // Sync UI textboxes so user sees the corrected values instantly
+        if (minInput) minInput.value = minF;
+        if (maxInput) maxInput.value = maxF;
+
+        // V131: Dynamic Logarithmic Color Hue mapping
+        let mapColorId = 400; // Default: 400 is the special code for Full Range (Cyan)
+        if (!(minF <= 20 && maxF >= 22000)) {
+            // Find geometric center of frequencies (How humans perceive pitch)
+            let centerFreq = Math.max(1, Math.sqrt(minF * maxF));
+            let logCenter = Math.log2(centerFreq);
+            
+            // Map the human hearing range (log2(20)=4.32 to log2(22050)=14.42) across 280 degrees of the color wheel (Red -> Purple)
+            let hue = Math.floor(((logCenter - 4.32) / 10.1) * 280);
+            if (hue < 0) hue = 0;
+            if (hue > 360) hue = 360;
+            
+            mapColorId = hue + 1; // +1 so 0 is strictly reserved for "Unmapped"
+        }
+
+        const zeroDelay = new MessageChannel();
+        zeroDelay.port1.onmessage = () => loop();
+
+        if (!file._hasMapped) { file.mappedSlices.fill(0); file._hasMapped = true; }
+
+        const loop = () => {
+            const startTime = performance.now();
+            const timeBudget = document.hidden ? 400 : 15;
+
+            while (offset < endSample && performance.now() - startTime < timeBudget) {
+                // ALIGNMENT FIX: Map using offset / sampleRate for perfect 1:1 visual match
+                const currentSec = offset / sampleRate;
+                const sliceIdx = Math.floor(currentSec * TIME_SLICE_RES);
+
+                if (sliceIdx < file.temporalData.length) {
+                    // Prevent overlapping slice data from stacking across passes
+                    if (!file._clearedSlices) file._clearedSlices = new Set();
+                    if (!file._clearedSlices.has(sliceIdx)) {
+                        file.temporalData[sliceIdx].fill(0);
+                        file._clearedSlices.add(sliceIdx);
+                    }
+
+                    for (let c = 0; c < numChannels; c++) {
+                        for (let i = 0; i < FFT_SIZE; i++) {
+                            let sample = channels[c][offset + i];
+                            if (sample === undefined || isNaN(sample)) sample = 0;
+                            real[i] = sample * windowTable[i];
+                            imag[i] = 0;
+                        }
+                        fft(real, imag);
+                        mapToPCP(real, imag, sampleRate, file.temporalData[sliceIdx], numChannels, minF, maxF);
+                    }
+                    file.mappedSlices[sliceIdx] = mapColorId;
+                }
+
+                offset += Math.min(HOP_SIZE, Math.floor(sampleRate / TIME_SLICE_RES));
+            }
+
+            const percent = ((offset - initialOffset) / totalToProcess) * 100;
+            progressFill.style.width = percent + "%";
+
+            if (offset < endSample) {
+                zeroDelay.port2.postMessage(null);
+            } else {
+                delete file._clearedSlices;
+                
+                // Update global data layout for 0-100% full timeline views
+                const globalSum = new Float32Array(TOTAL_PCP_BINS);
+                for(let t=0; t<file.temporalData.length; t++) {
+                    for(let b=0; b<TOTAL_PCP_BINS; b++) {
+                        globalSum[b] += file.temporalData[t][b];
+                    }
+                }
+                file.data = globalSum;
+
+                if (btnMap) btnMap.disabled = false;
+                recalculateGraphRegion();
+                drawWaveform(buffer); // Redraw timeline to expose bright mapped areas
+                saveMapHistory();
+                
+                if (window.fileQueue && window.fileQueue.length > 0) {
+                    window.processNextInQueue();
+                } else {
+                    processingContainer.style.display = 'none';
+                    dropZone.style.display = 'flex';
+                    window.isProcessingQueue = false;
+                    const sDiv = document.getElementById('status');
+                    if (sDiv) sDiv.textContent = "Analysis & Mapping Complete.";
+                    const dZoneH2 = document.querySelector('#drop-zone h2');
+                    if (dZoneH2) dZoneH2.textContent = "Drag & Drop to Layer Another File";
+                }
+            }
+        };
+        loop();
+    };
+
+    function mapToPCP(real, imag, sampleRate, accumulator, numChannels = 1, minFreq = 20, maxFreq = 22050) {
+        const limit = FFT_SIZE / 2;
+        const binFreq = sampleRate / FFT_SIZE;
+        const len = accumulator.length; // Micro-optimization: Cache length
+
+        // Precompute magnitudes for sub-bin interpolation
+        const mags = new Float32Array(limit);
+        for (let i = 1; i < limit; i++) {
+            mags[i] = Math.sqrt(real[i]*real[i] + imag[i]*imag[i]);
+        }
+
+        for (let i = 2; i < limit - 1; i++) {
+            let mag = mags[i];
+            if (mag < 0.00001) continue; 
+
+            let freq = i * binFreq;
+
+            // 1. Sub-Bin Parabolic Interpolation (Fixes split peaks & bass accuracy)
+            // Only apply if it's a local maximum to avoid distorting the noise floor
+            if (mag > mags[i-1] && mag > mags[i+1]) {
+                const alpha = mags[i-1];
+                const gamma = mags[i+1];
+                const denom = alpha - 2 * mag + gamma;
+                if (denom !== 0) {
+                    const offset = 0.5 * (alpha - gamma) / denom;
+                    freq = (i + offset) * binFreq;
+                    mag = mag - 0.25 * (alpha - gamma) * offset;
+                }
+            }
+
+            if (freq < minFreq || freq > maxFreq) continue; 
+
+            // 2. Perceptual Weighting / Spectral Whitening (A-weighting approximation)
+            // Fixes the 1/f energy bias so bass no longer masks the higher frequencies
+            const f2 = freq * freq;
+            const aWeight = (12128.81 * 12128.81 * f2 * f2) / 
+                ((f2 + 20.6 * 20.6) * Math.sqrt((f2 + 107.7 * 107.7) * (f2 + 737.9 * 737.9)) * (f2 + 12128.81 * 12128.81));
+            
+            mag = (mag * aWeight) / numChannels;
+            if (isNaN(mag) || !isFinite(mag)) mag = 0; // V101 Safety
+
+            // High-precision mapping
+            const midi = 69 + 12 * Math.log2(freq / 440);
+            let pitchClass = midi % 12;
+            if (pitchClass < 0) pitchClass += 12;
+
+            // Linear Distribution (Anti-aliasing)
+            const preciseBin = pitchClass * BINS_PER_SEMITONE;
+            const lowerBin = Math.floor(preciseBin);
+            const fraction = preciseBin - lowerBin;
+            
+            // Distribute energy to Lower Bin
+            if (lowerBin < len) {
+                accumulator[lowerBin] += mag * (1 - fraction);
+            } else {
+                accumulator[0] += mag * (1 - fraction); // Handle edge case wrapping
+            }
+
+            // Distribute energy to Upper Bin (Wrap around)
+            const upperBin = (lowerBin + 1);
+            if (upperBin < len) {
+                accumulator[upperBin] += mag * fraction;
+            } else {
+                accumulator[0] += mag * fraction;
+            }
+        }
+    }
+
+
+    
+    function finishAnalysis(temporalData, name, buffer, mappedSlices) {
+        // Calculate Global Sum (for default view)
+        const globalSum = new Float32Array(TOTAL_PCP_BINS);
+        for(let t=0; t<temporalData.length; t++) {
+            for(let b=0; b<TOTAL_PCP_BINS; b++) {
+                globalSum[b] += temporalData[t][b];
+            }
+        }
+
+        filesData.push({
+            name: name,
+            data: globalSum,         // Default full view
+            temporalData: temporalData, // V37: Time Slices
+            mappedSlices: mappedSlices || new Uint16Array(temporalData.length), // V103 tracking
+            visible: true,
+            color: getColor(filesData.length),
+            colorAlpha: getColor(filesData.length).replace(')', ', 0.15)').replace('hsl', 'hsla'),
+            colorAlphaLight: getColor(filesData.length).replace(')', ', 0.2)').replace('hsl', 'hsla'),
+            buffer: buffer
+        });
+
+        setActiveFile(filesData.length - 1);
+        saveMapHistory();
+        
+        const autoMapToggle = document.getElementById('auto-map-toggle');
+        if (autoMapToggle && autoMapToggle.checked) {
+            document.getElementById('range-start').value = 0;
+            document.getElementById('range-end').value = 100;
+            loopStartPct = 0;
+            loopEndPct = 100;
+            if (typeof updateRegionUI === 'function') updateRegionUI();
+            mapSelectedRange();
+        } else {
+            // Check if there are more files in the queue
+            if (window.fileQueue && window.fileQueue.length > 0) {
+                window.processNextInQueue();
+            } else {
+                window.isProcessingQueue = false;
+                statusDiv.textContent = "Analysis Complete.";
+                dropZone.style.display = 'flex'; 
+                dropZone.querySelector('h2').textContent = "Drag & Drop to Layer Another File";
+                processingContainer.style.display = 'none';
+            }
+        }
+    }
+
+
+    // V19: Switch Active Audio
+    window.setActiveFile = (index) => {
+        // 1. Hard Stop if playing
+        if (isPlaying) {
+            stopAudio(); 
+        }
+        
+        // BUG FIX v23: Force Button Reset (stopAudio doesn't reset the UI button text)
+        const btn = document.getElementById('btn-play');
+        if(btn) {
+            btn.textContent = "▶ Play";
+            btn.style.background = "#00d2ff"; 
+        }
+
+        // 2. Swap Buffer
+        currentAudioBuffer = filesData[index].buffer;
+        
+        // 3. Reset Timeline UI completely
+        playbackOffset = 0;
+        document.getElementById('seek-slider').value = 0;
+        document.getElementById('time-cur').textContent = "0:00";
+        
+        document.getElementById('range-start').value = 0;
+        document.getElementById('range-end').value = 100;
+        loopStartPct = 0;
+        loopEndPct = 100;
+        if (typeof updateRegionUI === 'function') updateRegionUI();
+        
+        if(currentAudioBuffer) {
+             document.getElementById('time-dur').textContent = formatTime(currentAudioBuffer.duration);
+        }
+
+        renderFileList(); 
+        if(currentAudioBuffer) drawWaveform(currentAudioBuffer); // PATCH V43: Update Timeline
+        
+        // [V122 PATCH] Recalculate graph regions so background files update to the reset 0-100% range
+        if (typeof recalculateGraphRegion === 'function') {
+            recalculateGraphRegion();
+        } else {
+            renderGraph();
+        }
+    };
+
+    function renderFileList() {
+        const listContainer = document.getElementById('file-list');
+        listContainer.style.display = 'block';
+        listContainer.innerHTML = '';
+
+        filesData.forEach((file, index) => {
+            const row = document.createElement('div');
+            row.className = 'file-row';
+            
+            // Check if this is the active audio
+            const isActive = (file.buffer === currentAudioBuffer);
+            const activeStyle = isActive ? "border-left: 3px solid #00d2ff; background: #222;" : "";
+            const activeText = isActive ? "color: #00d2ff; font-weight:bold;" : `color: ${file.visible ? '#fff' : '#555'};`;
+
+            row.style.cssText = activeStyle;
+            
+            row.innerHTML = `
+                <div class="file-info" style="${activeText}">
+                    <span class="color-dot" style="background-color: ${file.color}; opacity: ${file.visible ? 1 : 0.3}"></span>
+                    <span>${file.name} ${isActive ? '(Active)' : ''}</span>
+                </div>
+                <div class="file-controls">
+                    <!-- V19: Load Button -->
+                    <button class="btn-mini" onclick="setActiveFile(${index})" style="${isActive ? 'display:none' : ''}">
+                        🎵 Load
+                    </button>
+                
+                    <button class="btn-mini" onclick="toggleVisibility(${index})">
+                        ${file.visible ? 'Hide' : 'Show'}
+                    </button>
+                    <button class="btn-mini" onclick="removeFile(${index})">X</button>
+                </div>
+            `;
+            listContainer.appendChild(row);
+        });
+    }
+
+    window.toggleVisibility = (index) => {
+        // [V119 PATCH] Track control panel position to prevent scroll bump
+        const _controls = document.querySelector('.controls');
+        const _rectBefore = _controls ? _controls.getBoundingClientRect().top : 0;
+
+        filesData[index].visible = !filesData[index].visible;
+        renderFileList();
+        renderGraph();
+
+        // [V119 PATCH] Restore visual position so the buttons don't jump away
+        if (_controls) {
+            const _rectAfter = _controls.getBoundingClientRect().top;
+            const diff = _rectAfter - _rectBefore;
+            if (diff !== 0) {
+                window.scrollBy(0, diff);
+            }
+        }
+    };
+
+    window.removeFile = (index) => {
+        // [V119 PATCH] Track control panel position to prevent scroll bump
+        const _controls = document.querySelector('.controls');
+        const _rectBefore = _controls ? _controls.getBoundingClientRect().top : 0;
+
+        const removingActive = (filesData[index] && filesData[index].buffer === currentAudioBuffer);
+        filesData.splice(index, 1);
+        
+        if (removingActive) {
+            stopAudio();
+            currentAudioBuffer = null;
+            document.getElementById('time-dur').textContent = "0:00";
+            document.getElementById('time-cur').textContent = "0:00";
+            const slider = document.getElementById('seek-slider');
+            if (slider) slider.value = 0;
+            const c = document.getElementById('wave-canvas');
+            if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height);
+        }
+        
+        if (filesData.length === 0) {
+            document.getElementById('file-list').style.display = 'none';
+        } else if (removingActive && filesData.length > 0) {
+            setActiveFile(0); // Auto-load next available if active was removed
+        }
+        
+        renderFileList();
+        renderGraph();
+
+        // [V119 PATCH] Restore visual position so the buttons don't jump away
+        if (_controls) {
+            const _rectAfter = _controls.getBoundingClientRect().top;
+            const diff = _rectAfter - _rectBefore;
+            if (diff !== 0) {
+                window.scrollBy(0, diff);
+            }
+        }
+    };
+
+
+    // --- Custom Cooley-Tukey FFT Implementation (Radix-2) ---
+    // Standard optimized recursive (or iterative bit-reversal) implementation
+    // Adapted for single-file JS usage.
+    
+    function fft(rex, imx) {
+        const n = rex.length;
+        const m = Math.log2(n);
+        
+        // Bit Reversal
+        let j = 0;
+        for (let i = 0; i < n - 1; i++) {
+            if (i < j) {
+                let temp = rex[i]; rex[i] = rex[j]; rex[j] = temp;
+                temp = imx[i]; imx[i] = imx[j]; imx[j] = temp;
+            }
+            let k = n / 2;
+            while (k <= j) { j -= k; k /= 2; }
+            j += k;
+        }
+
+        // Computation
+        for (let l = 1; l <= m; l++) {
+            const le = Math.pow(2, l);
+            const le2 = le / 2;
+            const angle = Math.PI / le2;
+            for (let j = 1; j <= le2; j++) {
+                // Exact calculation to prevent trigonometric float drift
+                const ur_exact = Math.cos(angle * (j - 1));
+                const ui_exact = -Math.sin(angle * (j - 1));
+                
+                for (let i = j - 1; i < n; i += le) {
+                    const ip = i + le2;
+                    const tr = rex[ip] * ur_exact - imx[ip] * ui_exact;
+                    const ti = rex[ip] * ui_exact + imx[ip] * ur_exact;
+                    rex[ip] = rex[i] - tr;
+                    imx[ip] = imx[i] - ti;
+                    rex[i] = rex[i] + tr;
+                    imx[i] = imx[i] + ti;
+                }
+            }
+        }
+    }
+    // V4 Button Logic Removed in v30 (Merged into Slider)
+    
+    // --- PATCHED: Grid/Tuning UI Logic ---
+    
+    window.updateRootNoteVisibility = () => {
+        const container = document.getElementById('root-note-container');
+        if(!container) return;
+        
+        // Find if custom offset tunings are currently visible
+        const pyth = tuningStandards.find(t => t.id === 'pyth');
+        const renold = tuningStandards.find(t => t.id === 'renold');
+        
+        if((pyth && pyth.visible) || (renold && renold.visible)) {
+            container.style.display = 'flex';
+        } else {
+            container.style.display = 'none';
+        }
+    };
+
+    function initTuningUI() {
+        const container = document.getElementById('tuning-controls');
+        if(!container) return;
+        
+        container.innerHTML = '<span style="font-size: 1.1rem; color:#888; margin-right:5px;">Grids:</span>';
+
+        tuningStandards.forEach((t, i) => {
+            const btn = document.createElement('button');
+            btn.id = `tune-btn-${i}`;
+            btn.textContent = t.name;
+            btn.style.background = 'transparent';
+            btn.style.color = t.color;
+            btn.style.border = `1px solid ${t.visible ? t.color : '#444'}`;
+            btn.style.opacity = t.visible ? '1' : '0.4';
+            btn.style.cursor = 'pointer';
+            btn.style.fontSize = '1.05rem'; btn.style.fontWeight = 'bold'; btn.style.transition = 'all 0.2s';
+            btn.style.padding = '8px 16px';
+            btn.style.borderRadius = '25px';
+            btn.style.marginRight = '4px';
+            
+            btn.onclick = () => toggleTuning(i);
+            btn.onmouseover = () => { btn.style.transform = 'scale(1.05)'; };
+            btn.onmouseout = () => { btn.style.transform = 'scale(1)'; };
+            
+            container.appendChild(btn);
+        });
+    }
+
+    window.toggleTuning = (index) => {
+        // [V119 PATCH] Track control panel position to prevent scroll bump
+        const _controls = document.querySelector('.controls');
+        const _rectBefore = _controls ? _controls.getBoundingClientRect().top : 0;
+
+        // Toggle State
+        tuningStandards[index].visible = !tuningStandards[index].visible;
+        
+        // Update Button Visuals
+        const t = tuningStandards[index];
+        const btn = document.getElementById(`tune-btn-${index}`);
+        if(btn) {
+            btn.style.borderColor = t.visible ? t.color : '#444';
+            btn.style.opacity = t.visible ? '1' : '0.4';
+        }
+        
+        if (window.updateRootNoteVisibility) window.updateRootNoteVisibility();
+        
+        // Redraw Canvas
+        renderGraph();
+
+        // [V119 PATCH] Restore visual position so the buttons don't jump away
+        if (_controls) {
+            const _rectAfter = _controls.getBoundingClientRect().top;
+            const diff = _rectAfter - _rectBefore;
+            if (diff !== 0) {
+                window.scrollBy(0, diff);
+            }
+        }
+    };
+
+    // Initialize the UI immediately
+    initTuningUI();
+    if (window.updateRootNoteVisibility) window.updateRootNoteVisibility();
+    // -------------------------------------
+    
+    // --- PATCH V11: Calibration Functions ---
+    function updateCalibration() {
+        // V15: Sum both sliders
+        const coarse = parseFloat(document.getElementById('cal-slider').value);
+        const fine = parseFloat(document.getElementById('fine-slider').value);
+        calibrationCents = coarse + fine;
+        // val variable no longer needed, we calculate directly
+    
+        
+        // PATCH V17: Live Varispeed (With Timer Fix)
+        if (activeSourceNode && isPlaying) {
+            const ratio = Math.pow(2, calibrationCents / 1200);
+            
+            // 1. Snapshot current visual position using OLD rate
+            const now = globalAudioCtx.currentTime;
+            const playedReal = now - playbackStartTime;
+            const playedAudio = playedReal * playbackRate; // uses old rate
+
+            // 2. Commit this to the offset
+            if(currentAudioBuffer) {
+                playbackOffset = (playbackOffset + playedAudio) % currentAudioBuffer.duration;
+            }
+
+            // 3. Reset anchor to NOW
+            playbackStartTime = now;
+
+            // 4. Apply NEW rate
+            activeSourceNode.playbackRate.value = ratio;
+            playbackRate = ratio; // Update global var for UI loop
+        }
+
+        // 1. Calculate Values
+        const ratio = Math.pow(2, calibrationCents / 1200);
+        const speedPct = (ratio - 1) * 100;
+        const semis = calibrationCents / 100;
+
+        // 2. Update UI Text (Only if not focused to prevent cursor jumping)
+        const activeEl = document.activeElement;
+        
+        if (activeEl.id !== 'val-cents') {
+            document.getElementById('val-cents').value = calibrationCents.toFixed(4);
+        }
+        if (activeEl.id !== 'val-speed') {
+            document.getElementById('val-speed').value = speedPct.toFixed(4);
+        }
+        if (activeEl.id !== 'val-semi') {
+            document.getElementById('val-semi').value = semis.toFixed(4);
+        }
+        
+        // 4. Redraw
+        renderGraph();
+    }
+
+    function resetCalibration() {
+        document.getElementById('cal-slider').value = 0;
+        document.getElementById('fine-slider').value = 0;
+        updateCalibration();
+        saveShiftHistory();
+    }
+    // ----------------------------------------
+    
+    
+    // --- PATCH V14: Advanced Playback Engine ---
+    
+    function formatTime(seconds) {
+        if (isNaN(seconds) || !isFinite(seconds) || seconds < 0) return '0:00';
+
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    }
+
+    function togglePlayback() {
+        const btn = document.getElementById('btn-play');
+        if (isPlaying) {
+            stopAudio();
+            btn.textContent = "▶ Play";
+            btn.style.background = "#00d2ff"; 
+        } else {
+            if (!currentAudioBuffer) {
+                alert("Please drop an audio file first.");
+                return;
+            }
+            startAudio(playbackOffset);
+            btn.textContent = "⏹ Stop";
+            btn.style.background = "#ff4444"; 
+        }
+    }
+
+    
+    
+    function startAudio(offset) {
+        if (activeSourceNode) activeSourceNode.disconnect();
+        
+        activeSourceNode = globalAudioCtx.createBufferSource();
+        activeSourceNode.buffer = currentAudioBuffer;
+        
+        const ratio = Math.pow(2, calibrationCents / 1200);
+        activeSourceNode.playbackRate.value = ratio;
+        playbackRate = ratio;
+
+        activeSourceNode.connect(globalAudioCtx.destination);
+        
+        // V40: Standard full-track looping (Removed A/B forcing)
+        activeSourceNode.loop = true; 
+        
+        // Sanity check offset
+        if (offset < 0 || offset >= currentAudioBuffer.duration) offset = 0;
+
+        activeSourceNode.start(0, offset);
+        
+        playbackStartTime = globalAudioCtx.currentTime;
+        playbackOffset = offset;
+        isPlaying = true;
+        
+        if(rafId) cancelAnimationFrame(rafId);
+        updateTimelineLoop();
+    }
+
+
+
+    function stopAudio() {
+        if (activeSourceNode) {
+            try { activeSourceNode.stop(); } catch(e){}
+            activeSourceNode.disconnect();
+            activeSourceNode = null;
+        }
+        isPlaying = false;
+        if(rafId) cancelAnimationFrame(rafId);
+        
+        // Save position
+        if(currentAudioBuffer) {
+             const elapsedReal = globalAudioCtx.currentTime - playbackStartTime;
+             const elapsedAudio = elapsedReal * playbackRate;
+             playbackOffset = (playbackOffset + elapsedAudio) % currentAudioBuffer.duration;
+             updateTimelineUI(playbackOffset);
+        }
+    }
+
+    // Animation Loop
+    
+    // --- V39 Fixed Loop Sync Engine ---
+    
+    function updateTimelineLoop() {
+        if(!isPlaying) return;
+        
+        if(!isDraggingSeek && currentAudioBuffer) {
+            // Standard Linear Time Calculation
+            const elapsedReal = globalAudioCtx.currentTime - playbackStartTime;
+            const elapsedAudio = elapsedReal * playbackRate;
+            let currentPos = (playbackOffset + elapsedAudio) % currentAudioBuffer.duration;
+            
+            updateTimelineUI(currentPos);
+        }
+        
+        rafId = requestAnimationFrame(updateTimelineLoop);
+    }
+
+
+
+    function updateTimelineUI(time) {
+        const dur = currentAudioBuffer ? currentAudioBuffer.duration : 1;
+        const pct = (time / dur) * 100;
+        
+        const slider = document.getElementById('seek-slider');
+        if(slider) slider.value = pct;
+        
+        document.getElementById('time-cur').textContent = formatTime(time);
+    }
+    
+    // --- Scrubber Interactions ---
+    
+    window.onSeekInput = (val) => {
+        isDraggingSeek = true;
+        const dur = currentAudioBuffer ? currentAudioBuffer.duration : 0;
+        if(dur) {
+            const time = (val / 100) * dur;
+            document.getElementById('time-cur').textContent = formatTime(time);
+        }
+    };
+
+    window.onSeekRelease = (val) => {
+        isDraggingSeek = false;
+        if(!currentAudioBuffer) return;
+        
+        const dur = currentAudioBuffer.duration;
+        const newTime = (val / 100) * dur;
+        
+        playbackOffset = newTime;
+        
+        if(isPlaying) {
+            // Restart audio engine at new offset
+            startAudio(newTime);
+        } else {
+            updateTimelineUI(newTime);
+        }
+    };
+
+    // Force Reset on Load to clear browser cache of inputs
+    window.addEventListener('resize', () => { if(currentAudioBuffer) drawWaveform(currentAudioBuffer); });
+    window.addEventListener('load', () => {
+        // Force Reset Root Note Dropdown against browser caching
+        const rootSelect = document.getElementById('root-note-select');
+        if (rootSelect) rootSelect.value = "0";
+        updateRootNote();
+        if (window.updateRootNoteVisibility) window.updateRootNoteVisibility();
+
+        // Reset Logic
+        document.getElementById('seek-slider').value = 0;
+        document.getElementById('cal-slider').value = 0;
+        document.getElementById('fine-slider').value = 0;
+        document.getElementById('zoom-slider').value = 1;
+
+        // Force Sync missing sliders, toggles, & states
+        const smoothSlider = document.getElementById('smooth-slider');
+        if (smoothSlider) { smoothSlider.value = 0; updateSmoothingLevel(0); }
+
+        const peakToggle = document.getElementById('peak-toggle');
+        if (peakToggle) { peakToggle.checked = true; togglePeakLines(true); }
+        
+        const shiftAllToggle = document.getElementById('shift-all-toggle');
+        if (shiftAllToggle) { shiftAllToggle.checked = true; }
+        
+        const exportFormat = document.getElementById('export-format');
+        if (exportFormat) { 
+            exportFormat.value = 'wav'; 
+            if (typeof toggleImageUpload === 'function') toggleImageUpload(); 
+        }
+        
+        const autoMapToggle = document.getElementById('auto-map-toggle');
+        if (autoMapToggle) { autoMapToggle.checked = false; }
+        
+        // Reset A/B
+        document.getElementById('range-start').value = 0;
+        document.getElementById('range-end').value = 100;
+        
+        // Reset Internal States
+        calibrationCents = 0;
+        loopStartPct = 0;
+        loopEndPct = 100;
+        zoomLevel = 1.0;
+        panOffset = 0;
+        
+        // Trigger Updates
+        updateCalibration();
+        updateRegion('start'); // Force UI redraw
+        document.getElementById('zoom-val').innerText = "1.0x";
+        if (currentAudioBuffer) {
+            saveShiftHistory();
+            saveMapHistory();
+        }
+    });
+
+
+    
+    
+    // --- V30 FIXED: Slider Logic (0 = OFF) ---
+    window.updateSmoothingLevel = (val) => {
+        smoothingPasses = parseInt(val);
+        const valLabel = document.getElementById('smooth-val');
+        
+        if(smoothingPasses === 0) {
+            valLabel.innerText = "OFF";
+            valLabel.style.color = "#777";
+        } else {
+            valLabel.innerText = val;
+            valLabel.style.color = "#00ff41";
+        }
+        
+        // Always render (0 passes will just return raw data)
+        renderGraph();
+    };
+    // -------------------------------
+
+    // --- Proof / Verification Logic ---
+    function toggleProofModal() {
+        const modal = document.getElementById('proof-modal');
+        const container = document.getElementById('proof-table-container');
+        
+        if (modal.style.display === 'block') {
+            modal.style.display = 'none';
+        } else {
+            generateProofTable(container);
+            modal.style.display = 'block';
+        }
+    }
+    
+    // Close modal when clicking outside
+    window.onclick = function(event) {
+        const modal = document.getElementById('proof-modal');
+        if (event.target == modal) {
+            modal.style.display = "none";
+        }
+    }
+
+    function generateProofTable(container) {
+        let html = '<table class="proof-table"><thead><tr><th>NOTE</th>';
+        
+        // Generate Headers based on defined standards
+        tuningStandards.forEach(t => {
+            html += `<th style="color:${t.color}; border-bottom: 2px solid ${t.color}">${t.name}<br><span style="font-size: 1.05em; color:#888;">${t.hz} Hz</span></th>`;
+        });
+        html += '</tr></thead><tbody>';
+
+        const noteNames = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B"];
+
+        // Generate Rows (Notes)
+        for(let i=0; i<12; i++) {
+            html += `<tr><td><b>${noteNames[i]}</b></td>`;
+            
+            tuningStandards.forEach(t => {
+                let cents = 0;
+                let isTet = (t.type === 'tet');
+                
+                if (isTet) {
+                    // TET: Simple 100 cent steps
+                    cents = i * 100;
+                } else {
+                    // Custom: Read from offset array
+                    cents = t.offsets[i];
+                }
+                
+                // Formatting
+                let valStr = cents.toFixed(4);
+                
+                // Highlight Pure values vs TET
+                let style = isTet ? 'color:#888;' : 'color:#fff; font-weight:bold;';
+                
+                html += `<td style="${style}">${valStr}</td>`;
+            });
+            html += '</tr>';
+        }
+        html += '</tbody></table>';
+        
+        // Raw Data Dump for Verification
+        html += '<h3 class="section-header">Raw Array Dump (Source Code)</h3>';
+        
+        html += '<div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">';
+        
+        html += '<div><strong>Pythagorean Offsets (Current Key):</strong><div class="raw-data-box">';
+        html += JSON.stringify(pythOffsets, null, 1).replace(/\[/g, '').replace(/\]/g, '').trim();
+        html += '</div></div>';
+        
+        html += '<div><strong>Just Intonation Offsets (Current Key):</strong><div class="raw-data-box">';
+        html += JSON.stringify(justOffsets, null, 1).replace(/\[/g, '').replace(/\]/g, '').trim();
+        html += '</div></div>';
+        
+        html += '</div>';
+
+        container.innerHTML = html;
+    }
+    // ----------------------------------
+    
+    
+
+    // --- V31 Patched Render Function (Supports Zoom/Pan) ---
+    function renderGraph() {
+        const w = canvas.width;
+        const h = canvas.height;
+        const padBot = 40;
+        
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#080808';
+        ctx.fillRect(0, 0, w, h);
+        
+        // Helper: Transform X coordinate
+        const getX = (normalizedPos) => {
+            // normalizedPos is 0.0 to 1.0 (screen width)
+            // World X = normalizedPos * w
+            // Scaled X = World X * zoomLevel
+            // Screen X = Scaled X - panOffset
+            return (normalizedPos * w * zoomLevel) - panOffset;
+        };
+        
+        // 1. Draw Selected Tuning Grids
+        tuningStandards.forEach(tune => {
+            if(!tune.visible) return;
+            const baseShift = 12 * Math.log2(tune.hz / 440);
+            
+            for(let i=0; i<12; i++) {
+                let centsFromA = 0;
+                if (tune.type === 'tet') {
+                    centsFromA = (i - 9) * 100;
+                } else {
+                    centsFromA = tune.offsets[i] - tune.offsets[9];
+                    if (centsFromA < -1200) centsFromA += 1200;
+                    if (centsFromA > 1200) centsFromA -= 1200;
+                }
+                
+                let posInSemitones = 9 + (centsFromA / 100) + baseShift;
+                while(posInSemitones < 0) posInSemitones += 12;
+                while(posInSemitones >= 12) posInSemitones -= 12;
+
+                // New X Calculation
+                const x = getX(posInSemitones / 12);
+                
+                // Optimization: Don't draw if off screen
+                if (x < -50 || x > w + 50) continue; 
+                
+                ctx.beginPath();
+                ctx.strokeStyle = tune.color;
+                ctx.lineWidth = (tune.id === 'iso' || tune.id === 'verdi') ? 1.5 : 1; 
+                ctx.setLineDash(tune.dash);
+                ctx.globalAlpha = 0.7; 
+                
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, h - 40);
+                ctx.stroke();
+                
+                if (i === 9) { 
+                    ctx.fillStyle = tune.color;
+                    ctx.font = '13px monospace';
+                    ctx.fillText(tune.id.toUpperCase(), x + 4, 15);
+                }
+            }
+            ctx.setLineDash([]);
+            ctx.globalAlpha = 1.0;
+        });
+    
+        // Draw Bottom Labels
+        for(let i=0; i<12; i++) {
+            // Align label exactly under the precise frequency line
+            const normPos = (i / 12);
+            const x = getX(normPos);
+
+            if (x < -20 || x > w + 20) continue;
+
+            ctx.fillStyle = '#aaa';
+            ctx.font = '16px sans-serif';
+            ctx.textAlign = 'center';
+            
+            let label = NOTES[i];
+            if (tuningStandards[0].visible && tuningStandards[0].id === 'iso') {
+                label = (i * 100); 
+            }
+            ctx.fillText(label, x, h - 10);
+        }
+        
+        // 2. Draw Data Curves
+        ctx.globalCompositeOperation = 'screen'; 
+
+        filesData.forEach(file => {
+            if (!file.visible) return;
+
+            const shiftAllToggle = document.getElementById('shift-all-toggle');
+            const shiftAll = shiftAllToggle ? shiftAllToggle.checked : true;
+            const isActiveFile = (file.buffer && file.buffer === currentAudioBuffer);
+            const fileShiftAmount = (shiftAll || isActiveFile) ? calibrationCents * 0.5 : 0;
+
+            let drawData = getSmoothed(file.data); 
+            let max = 0;
+            for(let v of drawData) if(v > max) max = v;
+            if (max === 0) max = 1;
+
+            ctx.beginPath();
+            ctx.strokeStyle = file.color;
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 0;
+
+            let started = false;
+
+            // Step size optimization based on zoom (draw fewer lines if zoomed out, more if zoomed in)
+            // But we need precision. 
+            
+            for (let i = 0; i <= TOTAL_PCP_BINS; i++) {
+                const shiftAmount = fileShiftAmount;
+                let exactPos = i - shiftAmount;
+                exactPos = ((exactPos % TOTAL_PCP_BINS) + TOTAL_PCP_BINS) % TOTAL_PCP_BINS;
+                
+                const idx1 = Math.floor(exactPos);
+                const idx2 = (idx1 + 1) % TOTAL_PCP_BINS; 
+                const frac = exactPos - idx1;
+                
+                const val1 = drawData[idx1];
+                const val2 = drawData[idx2];
+                const interpolatedVal = val1 * (1 - frac) + val2 * frac;
+
+                let val = interpolatedVal / max;
+                if (isNaN(val) || !isFinite(val)) val = 0; // V101 Safety
+                const y = (h - padBot) - (val * (h - padBot - 50));
+                
+                // NEW X Calculation
+                const x = getX(i / TOTAL_PCP_BINS);
+
+                // Optimization: Lift pen if line goes off screen to save GPU/CPU?
+                // Canvas is pretty fast at clipping, but we can avoid adding points if WAY off.
+                // However, we need continuity. Just draw all for now.
+                
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            // Gradient Fill (Draw BEFORE peaks to preserve path)
+            const grad = ctx.createLinearGradient(0, 0, 0, h);
+            grad.addColorStop(0, file.colorAlpha);
+            grad.addColorStop(1, 'rgba(0,0,0,0)');
+            
+            // Close the shape for fill
+            // We need the last X and the first X to close bottom
+            const xEnd = getX(0.9999); // approx end
+            const xStart = getX(0);
+
+            ctx.lineTo(xEnd, h - padBot);
+            ctx.lineTo(xStart, h - padBot);
+            ctx.fillStyle = grad;
+            ctx.fill();
+
+            // --- V50 Peak Indicators (Parabolic Interpolation) ---
+            if (showPeakLines) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'; 
+                ctx.lineWidth = 1;
+                
+                const shiftAmount = fileShiftAmount;
+
+                for (let p = 0; p < TOTAL_PCP_BINS; p++) {
+                    // Circular Array checking for Bin 0 (Perfect C) and Bin Max
+                    const prev = (p - 1 + TOTAL_PCP_BINS) % TOTAL_PCP_BINS;
+                    const next = (p + 1) % TOTAL_PCP_BINS;
+                    // 1. Basic Local Maxima Detection
+                    if (drawData[p] > drawData[prev] && drawData[p] > drawData[next]) {
+                        
+                        // 2. Threshold: Ignore noise floor (10% of max peak)
+                        if (drawData[p] > max * 0.1) {
+                            
+                            // 3. Parabolic Interpolation Logic
+                            // Find the true peak between bins
+                            const alpha = drawData[prev];
+                            const beta = drawData[p];
+                            const gamma = drawData[next];
+                            
+                            // Calculate fractional offset (-0.5 to 0.5)
+                            // Formula: 0.5 * (a - c) / (a - 2b + c)
+                            const denom = alpha - 2 * beta + gamma;
+                            let offset = 0;
+                            if (denom !== 0) {
+                                offset = 0.5 * (alpha - gamma) / denom;
+                            }
+
+                            // Precise Data Index
+                            const preciseP = p + offset;
+
+                            // 4. Map to Visual Position
+                            let visualIdx = preciseP + shiftAmount;
+                            
+                            // Handle Wrap logic
+                            visualIdx = ((visualIdx % TOTAL_PCP_BINS) + TOTAL_PCP_BINS) % TOTAL_PCP_BINS;
+
+                            const px = getX(visualIdx / TOTAL_PCP_BINS);
+
+                            // Only draw if visible on screen
+                            if (px > -10 && px < w + 10) {
+                                // Interpolate Peak Height for visual Y placement
+                                // Height = b - 0.25 * (a-c) * offset
+                                const peakHeight = beta - 0.25 * (alpha - gamma) * offset;
+                                const val = peakHeight / max;
+                                
+                                const py = (h - padBot) - (val * (h - padBot - 50));
+
+                                // Draw vertical tick marker
+                                ctx.beginPath();
+                                ctx.moveTo(px, py - 2);   // Start slightly above curve
+                                ctx.lineTo(px, py - 60);  // V52: Much taller line
+                                ctx.stroke();
+                            }
+                        }
+                    }
+                }
+                ctx.restore();
+            }
+            // ---------------------------
+        });
+
+        ctx.globalCompositeOperation = 'source-over';
+        
+        if (typeof updateAlignmentScore === 'function') {
+            updateAlignmentScore();
+        }
+    }
+
+
+    function drawWaveform(buffer) {
+        const c = document.getElementById('wave-canvas');
+        const cc = c.getContext('2d');
+        c.width = c.parentElement.clientWidth;
+        c.height = c.parentElement.clientHeight;
+        
+        cc.fillStyle = '#000';
+        cc.fillRect(0, 0, c.width, c.height);
+        
+        const activeFileIdx = filesData.findIndex(f => f.buffer === buffer);
+        const file = activeFileIdx !== -1 ? filesData[activeFileIdx] : null;
+
+        const data = buffer.getChannelData(0);
+        const step = Math.ceil(data.length / c.width);
+        const mid = c.height / 2;
+        const amp = mid * 0.90;
+        
+        let currentColor = '';
+        
+        for(let i=0; i < c.width; i++) {
+            let min = 1.0;
+            let max = -1.0;
+            for (let j=0; j<step && (i*step)+j < data.length; j++) {
+                const datum = data[(i*step)+j]; 
+                if (datum < min) min = datum;
+                if (datum > max) max = datum;
+            }
+            
+            let isMapped = false;
+            let mapType = 0;
+            if (file && file.mappedSlices) {
+                const pixelSec = (i / c.width) * buffer.duration;
+                const sliceIdx = Math.floor(pixelSec * TIME_SLICE_RES);
+                if (sliceIdx >= 0 && sliceIdx < file.mappedSlices.length && file.mappedSlices[sliceIdx] > 0) {
+                    isMapped = true;
+                    mapType = file.mappedSlices[sliceIdx];
+                }
+            }
+
+            // V131: Dynamic Color mapping based on Frequency Center
+            let pixelColor = '#a8bed1'; // Unmapped slate-blue
+            if (isMapped) {
+                if (mapType === 400) {
+                    pixelColor = '#00d2ff'; // Full Range (Cyan)
+                } else {
+                    const hue = mapType - 1; 
+                    pixelColor = `hsl(${hue}, 100%, 50%)`; // Render the specific frequency hue!
+                }
+            }
+            
+            if (pixelColor !== currentColor) {
+                if (currentColor !== '') cc.stroke();
+                cc.beginPath();
+                cc.strokeStyle = pixelColor;
+                
+                // Add Lightsaber Glow Effect to Mapped Regions
+                cc.shadowBlur = 0; // Neon glow removed to prevent blurring
+                cc.shadowColor = 'transparent';
+                cc.lineWidth = isMapped ? 1.5 : 1; 
+                
+                currentColor = pixelColor;
+            }
+            
+            cc.moveTo(i, mid - (min * amp));
+            cc.lineTo(i, mid - (max * amp));
+        }
+        if (currentColor !== '') cc.stroke();
+    }
+
+
+    // --- V37 Region Logic ---
+    
+    
+    // --- V37 Region Logic (Patched V42: Constraints) ---
+    window.updateRegion = (source) => {
+        const startInput = document.getElementById('range-start');
+        const endInput = document.getElementById('range-end');
+        
+        let s = parseFloat(startInput.value);
+        let e = parseFloat(endInput.value);
+        
+        // V42: Prevent Crossover
+        const minGap = 0.5; // Minimum 0.5% gap
+        
+        if (s >= e - minGap) {
+            if (source === 'start') {
+                s = e - minGap;
+                startInput.value = s;
+            } else {
+                e = s + minGap;
+                endInput.value = e;
+            }
+        }
+
+        loopStartPct = s;
+        loopEndPct = e;
+        
+        updateRegionUI();
+        recalculateGraphRegion();
+    };
+
+
+
+    
+    
+    function updateRegionUI() {
+        // V41 Spotlight Logic (V42: Lighter Tint):
+        const hl = document.getElementById('region-highlight');
+        
+        // V42: Changed from 0.85 to 0.5 for better visibility
+        const dimColor = "rgba(0,0,0,0.5)";
+        
+        hl.style.background = `linear-gradient(to right, 
+            ${dimColor} 0%, 
+            ${dimColor} ${loopStartPct}%, 
+            rgba(0,0,0,0) ${loopStartPct}%, 
+            rgba(0,0,0,0) ${loopEndPct}%, 
+            ${dimColor} ${loopEndPct}%, 
+            ${dimColor} 100%)`;
+        
+        if(currentAudioBuffer) {
+            const dur = currentAudioBuffer.duration;
+            document.getElementById('label-start').innerText = "Start: " + formatTime((loopStartPct/100)*dur);
+            document.getElementById('label-end').innerText = "End: " + formatTime((loopEndPct/100)*dur);
+        }
+    }
+
+
+
+    function recalculateGraphRegion() {
+        // Re-sum the PCP data based on selected chunks
+        filesData.forEach(file => {
+            if(!file.temporalData) return;
+            
+            const chunks = file.temporalData.length;
+            const startChunk = Math.floor((loopStartPct / 100) * chunks);
+            const endChunk = Math.ceil((loopEndPct / 100) * chunks);
+            
+            const newSum = new Float32Array(TOTAL_PCP_BINS);
+            
+            // Optimization: If full range, use cached full sum (if we stored it, else recalc)
+            // For now, fast loop recalc
+            for(let t = startChunk; t < endChunk && t < chunks; t++) {
+                const chunk = file.temporalData[t];
+                for(let b=0; b<TOTAL_PCP_BINS; b++) {
+                    newSum[b] += chunk[b];
+                }
+            }
+            
+            file.data = newSum; // Update display data
+        });
+        
+        renderGraph();
+    }
+
+
+    window.manualSync = (source) => {
+        let cents = 0;
+        if (source === 'cents') {
+            cents = parseFloat(document.getElementById('val-cents').value) || 0;
+        } else if (source === 'speed') {
+            let speedPct = parseFloat(document.getElementById('val-speed').value) || 0;
+            // Clamp speed percentage to avoid Math.log2(0) or log2(negative) NaN/Infinity crashes
+            speedPct = Math.max(-99.9, speedPct); 
+            // Formula: cents = 1200 * log2(1 + speedPct/100)
+            cents = 1200 * Math.log2(1 + (speedPct / 100));
+        } else if (source === 'semi') {
+            let semi = parseFloat(document.getElementById('val-semi').value) || 0;
+            cents = semi * 100;
+        }
+
+        // Update Slider UI (Coarse is integer, Fine is remainder)
+        const coarse = Math.round(cents);
+        const fine = cents - coarse;
+        
+        document.getElementById('cal-slider').value = coarse;
+        document.getElementById('fine-slider').value = fine;
+        
+        // Trigger the standard update logic
+        updateCalibration();
+        // saveShiftHistory() removed to prevent state flooding oninput
+    };
+    
+
+
+    // --- V48: Draggable Timeline Window (Scan Mode) ---
+    // FIXED: Allows A/B sliders to be dragged individually
+    
+    (function initWindowDrag() {
+        const tlWrapper = document.getElementById('timeline-wrapper');
+        let isWindowDrag = false;
+        let dragStartPct = 0;
+        let wStartAnchor = 0;
+        let wEndAnchor = 0;
+
+        // 1. Mouse Down: Check if clicking in the top zone between A and B
+        tlWrapper.addEventListener('mousedown', (e) => {
+            // FIX V48: Ignore if clicking the Range Inputs directly
+            if (e.target.id === 'range-start' || e.target.id === 'range-end') return;
+
+            const rect = tlWrapper.getBoundingClientRect();
+            const y = e.clientY - rect.top;
+            const x = e.clientX - rect.left;
+            const pct = (x / rect.width) * 100;
+
+            // Define "Top Zone" height (match CSS .range-slider height approx)
+            const isTopZone = (y < rect.height * 0.35);
+            
+            // Check if inside the current selection
+            const isInsideRegion = (pct > loopStartPct && pct < loopEndPct);
+
+            if (isTopZone && isInsideRegion) {
+                isWindowDrag = true;
+                dragStartPct = pct;
+                wStartAnchor = loopStartPct;
+                wEndAnchor = loopEndPct;
+                
+                tlWrapper.style.cursor = 'grabbing';
+                e.preventDefault(); // Prevent text selection
+                e.stopPropagation();
+            }
+        });
+
+        // 2. Mouse Move: Handle Dragging & Hover Cursor
+        window.addEventListener('mousemove', (e) => {
+            const rect = tlWrapper.getBoundingClientRect();
+            
+            // A. Hover Effect
+            if (!isWindowDrag && !isDraggingSeek) {
+                if (e.target === tlWrapper || tlWrapper.contains(e.target)) {
+                    // Don't show grab cursor if hovering over the thumbs
+                    if (e.target.id === 'range-start' || e.target.id === 'range-end') {
+                        tlWrapper.style.cursor = 'default';
+                        return;
+                    }
+
+                    const localY = e.clientY - rect.top;
+                    const localX = e.clientX - rect.left;
+                    
+                    if (localX >= 0 && localX <= rect.width && localY >= 0 && localY <= rect.height) {
+                        const pct = (localX / rect.width) * 100;
+                        const isTopZone = (localY < rect.height * 0.35);
+                        const isInsideRegion = (pct > loopStartPct && pct < loopEndPct);
+
+                        if (isTopZone && isInsideRegion) {
+                            tlWrapper.style.cursor = 'grab';
+                        } else {
+                            tlWrapper.style.cursor = 'default';
+                        }
+                    }
+                }
+            }
+
+            // B. Drag Logic
+            if (!isWindowDrag) return;
+
+            const currentX = e.clientX - rect.left;
+            const currentPct = (currentX / rect.width) * 100;
+            
+            const delta = currentPct - dragStartPct;
+            
+            let newS = wStartAnchor + delta;
+            let newE = wEndAnchor + delta;
+            const width = wEndAnchor - wStartAnchor;
+
+            // Clamp to 0-100
+            if (newS < 0) {
+                newS = 0;
+                newE = width;
+            }
+            if (newE > 100) {
+                newE = 100;
+                newS = 100 - width;
+            }
+
+            // Apply to Inputs
+            document.getElementById('range-start').value = newS;
+            document.getElementById('range-end').value = newE;
+            
+            // Update Global State
+            loopStartPct = newS;
+            loopEndPct = newE;
+
+            // Trigger UI Updates
+            updateRegionUI();
+            recalculateGraphRegion();
+        });
+
+        // 3. Mouse Up: Reset
+        window.addEventListener('mouseup', () => {
+            if (isWindowDrag) {
+                isWindowDrag = false;
+                tlWrapper.style.cursor = 'default';
+            }
+        });
+    })();
+
+    // --- V94 MULTI-GRID ALIGNMENT LOGIC & AUTO-SNAP ---
+    
+    // Auto-Align Function: Scans for the mathematical optimal pitch shift
+    window.autoAlign = (fileIdx, gridIdx) => {
+        const file = filesData[fileIdx];
+        const grid = tuningStandards[gridIdx];
+        if (!file || !grid) return;
+
+        // Auto-select this file so the global tuning slider applies to it properly
+        if (currentAudioBuffer !== file.buffer) {
+            setActiveFile(fileIdx);
+        }
+
+        let drawData = getSmoothed(file.data);
+        let max = 0;
+        for(let v of drawData) if(v > max) max = v;
+        if(max === 0) return;
+
+        // 1. Find dominant peaks
+        let peaks =[];
+        for (let p = 0; p < TOTAL_PCP_BINS; p++) {
+            const prev = (p - 1 + TOTAL_PCP_BINS) % TOTAL_PCP_BINS;
+            const next = (p + 1) % TOTAL_PCP_BINS;
+            if (drawData[p] > drawData[prev] && drawData[p] > drawData[next]) {
+                if (drawData[p] > max * 0.15) { // 15% threshold
+                    const alpha = drawData[prev];
+                    const beta = drawData[p];
+                    const gamma = drawData[next];
+                    const denom = alpha - 2 * beta + gamma;
+                    let offset = 0;
+                    if (denom !== 0) offset = 0.5 * (alpha - gamma) / denom;
+                    
+                    let peakIdx = p + offset;
+                    let peakAmp = beta - 0.25 * (alpha - gamma) * offset;
+                    peaks.push({ idx: peakIdx, amp: peakAmp });
+                }
+            }
+        }
+
+        if(peaks.length === 0) return;
+
+        // 2. Pre-calc grid bins
+        let tuningBins =[];
+        const baseShift = 12 * Math.log2(grid.hz / 440);
+        const rootSelect = document.getElementById('root-note-select');
+        const rootIndex = rootSelect ? parseInt(rootSelect.value) : 0;
+        const majorScaleIntervals =[0, 2, 4, 5, 7, 9, 11];
+
+        for(let i=0; i<12; i++) {
+            let centsFromA = 0;
+            if (grid.type === 'tet') centsFromA = (i - 9) * 100;
+            else centsFromA = grid.offsets[i] - grid.offsets[9];
+            let posInSemitones = 9 + (centsFromA / 100) + baseShift;
+            while(posInSemitones < 0) posInSemitones += 12;
+            while(posInSemitones >= 12) posInSemitones -= 12;
+            
+            let interval = (i - rootIndex + 12) % 12;
+            let weight = majorScaleIntervals.includes(interval) ? 0.7 : 0.3;
+            if (interval === 0) weight = 1.0; // Root note priority
+            if (interval === 7) weight = 0.9; // Perfect 5th priority
+            
+            tuningBins.push({ bin: (posInSemitones / 12) * TOTAL_PCP_BINS, weight: weight });
+        }
+
+        // 3. Two-Pass Brute Force for Optimal Shift
+        let current = calibrationCents || 0;
+        let bestCents = current;
+        let maxScore = -1;
+        const MAX_TOLERANCE_BINS = 12.5;
+
+        // Helper to calculate score for a given cent shift
+        const getScore = (c) => {
+            let shiftBins = c * 0.5; 
+            let alignedPeakAmp = 0;
+            let totalPeakAmp = 0;
+
+            for (let peak of peaks) {
+                let vIdx = ((peak.idx + shiftBins) % TOTAL_PCP_BINS + TOTAL_PCP_BINS) % TOTAL_PCP_BINS;
+                let maxPeakScore = 0;
+                
+                for(let tb of tuningBins) {
+                    let dist = Math.abs(vIdx - tb.bin);
+                    if (dist > TOTAL_PCP_BINS / 2) dist = TOTAL_PCP_BINS - dist;
+                    
+                    // Gaussian decay (continuous gradient) + Key Weighting
+                    let score = Math.exp(-(dist * dist) / 25.0) * tb.weight;
+                    if (score > maxPeakScore) maxPeakScore = score;
+                }
+                
+                totalPeakAmp += peak.amp;
+                alignedPeakAmp += maxPeakScore * peak.amp;
+            }
+            return totalPeakAmp > 0 ? (alignedPeakAmp / totalPeakAmp) * 100 : 0;
+        };
+
+        // PASS 1: Coarse Scan (+/- 50 cents, 1.0 cent resolution)
+        // PATCHED: Bound to absolute semitone grid to prevent State Drift
+        let searchCenter = Math.round(current / 100) * 100;
+        for (let c = searchCenter - 50; c <= searchCenter + 50; c += 1.0) {
+            let score = getScore(c);
+            if (score > maxScore) {
+                maxScore = score;
+                bestCents = c;
+            }
+        }
+
+        // PASS 2: Fine Scan (+/- 2.0 cents around best coarse result, 0.01 cent resolution)
+        // Pinpoints the absolute mathematical peak
+        let coarseBest = bestCents;
+        maxScore = -1; // Reset score tracker so fine pass evaluates cleanly
+        for (let c = coarseBest - 2.0; c <= coarseBest + 2.0; c += 0.01) {
+            let score = getScore(c);
+            if (score > maxScore) {
+                maxScore = score;
+                bestCents = c;
+            }
+        }
+
+        // 4. Apply Best Shift
+        document.getElementById('val-cents').value = bestCents.toFixed(4);
+        manualSync('cents'); // Syncs all inputs/sliders and triggers redraw
+        saveShiftHistory();
+    };
+
+    function updateAlignmentScore() {
+        const container = document.getElementById('alignment-meters-container');
+        if (!container) return;
+
+        // 1. Check Tuning Grids & Visible Files
+        const activeGrids = tuningStandards.filter(t => t.visible);
+        const visibleFiles = filesData.filter(f => f.visible);
+
+        // If no grids or no files are active, hide the meter container completely
+        if (activeGrids.length === 0 || visibleFiles.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+
+        container.style.display = 'block';
+        let html = '';
+
+        const shiftAllToggle = document.getElementById('shift-all-toggle');
+        const shiftAll = shiftAllToggle ? shiftAllToggle.checked : true;
+        const MAX_TOLERANCE_BINS = 12.5; // Represents 25 cents tolerance before scoring 0 points
+
+        // Iterate over each active grid
+        activeGrids.forEach((activeGrid, gridIndex) => {
+            
+            // Add a header for this specific tuning grid
+            html += `<div style="font-family: 'Segoe UI Mono', monospace; font-size: 1rem; color: #888; margin-top: ${gridIndex > 0 ? '15px' : '0'}; margin-bottom: 12px; letter-spacing:1px; font-weight:bold; text-align:center; border-bottom: 1px solid #333; padding-bottom: 5px;">
+                        TUNING ALIGNMENT MATCH <span style="color:${activeGrid.color};">(${activeGrid.name})</span>
+                     </div>`;
+
+            // 2. Pre-calculate the chosen grid's target bins
+            let tuningBins =[];
+            const baseShift = 12 * Math.log2(activeGrid.hz / 440);
+            const rootSelect = document.getElementById('root-note-select');
+            const rootIndex = rootSelect ? parseInt(rootSelect.value) : 0;
+            const majorScaleIntervals = [0, 2, 4, 5, 7, 9, 11];
+            for(let i=0; i<12; i++) {
+                let centsFromA = 0;
+                if (activeGrid.type === 'tet') centsFromA = (i - 9) * 100;
+                else centsFromA = activeGrid.offsets[i] - activeGrid.offsets[9];
+
+                let posInSemitones = 9 + (centsFromA / 100) + baseShift;
+                while(posInSemitones < 0) posInSemitones += 12;
+                while(posInSemitones >= 12) posInSemitones -= 12;
+
+                let binPos = (posInSemitones / 12) * TOTAL_PCP_BINS;
+                let interval = (i - rootIndex + 12) % 12;
+                let weight = majorScaleIntervals.includes(interval) ? 0.7 : 0.3;
+                if (interval === 0) weight = 1.0;
+                if (interval === 7) weight = 0.9;
+                
+                tuningBins.push({ bin: binPos, weight: weight });
+            }
+
+            // 3. Calculate score for EACH visible file against this specific grid
+            visibleFiles.forEach(file => {
+                let drawData = getSmoothed(file.data);
+                const fileShiftAmount = (shiftAll || (file.buffer === currentAudioBuffer)) ? calibrationCents * 0.5 : 0;
+
+                let max = 0;
+                for(let v of drawData) if(v > max) max = v;
+
+                let score = 0;
+                if (max > 0 && tuningBins.length > 0) {
+                    let totalPeakAmp = 0;
+                    let alignedPeakAmp = 0;
+
+                    for (let p = 0; p < TOTAL_PCP_BINS; p++) {
+                        const prev = (p - 1 + TOTAL_PCP_BINS) % TOTAL_PCP_BINS;
+                        const next = (p + 1) % TOTAL_PCP_BINS;
+                        
+                        // Basic local maxima detection
+                        if (drawData[p] > drawData[prev] && drawData[p] > drawData[next]) {
+                            if (drawData[p] > max * 0.15) { // 15% noise floor threshold
+                                const alpha = drawData[prev];
+                                const beta = drawData[p];
+                                const gamma = drawData[next];
+                                
+                                const denom = alpha - 2 * beta + gamma;
+                                let offset = 0;
+                                if (denom !== 0) {
+                                    offset = 0.5 * (alpha - gamma) / denom;
+                                }
+
+                                let visualIdx = p + offset + fileShiftAmount;
+                                visualIdx = ((visualIdx % TOTAL_PCP_BINS) + TOTAL_PCP_BINS) % TOTAL_PCP_BINS;
+
+                                let peakAmp = beta - 0.25 * (alpha - gamma) * offset;
+
+                                let maxPeakScore = 0;
+                                for(let tb of tuningBins) {
+                                    let dist = Math.abs(visualIdx - tb.bin);
+                                    if (dist > TOTAL_PCP_BINS / 2) dist = TOTAL_PCP_BINS - dist;
+                                    
+                                    let score = Math.exp(-(dist * dist) / 25.0) * tb.weight;
+                                    if (score > maxPeakScore) maxPeakScore = score;
+                                }
+
+                                totalPeakAmp += peakAmp;
+                                alignedPeakAmp += (maxPeakScore * peakAmp);
+                            }
+                        }
+                    }
+                    
+                    if (totalPeakAmp > 0) {
+                        score = (alignedPeakAmp / totalPeakAmp) * 100;
+                    }
+                }
+
+                // Determine text color based on score
+                let colorScore = '#ff4444';
+                if (score >= 80) colorScore = '#00ff41';
+                else if (score >= 50) colorScore = '#ffe600';
+
+                // Truncate file name if too long for the UI
+                let displayName = file.name;
+                if (displayName.length > 30) displayName = displayName.substring(0, 27) + '...';
+
+                // Add the mini-meter to the HTML payload (V94 updates to 2 decimals + Snap Button)
+                html += `
+                <div style="margin-bottom: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-family: 'Segoe UI Mono', monospace; font-size: 1.1rem; color: #ddd; margin-bottom: 3px;">
+                        <span style="display:flex; align-items:center; gap:8px; overflow:hidden; white-space:nowrap;">
+                            <span style="display:inline-block; min-width:10px; height:10px; border-radius:50%; background-color:${file.color}; box-shadow: 0 0 5px ${file.color};"></span>
+                            ${displayName}
+                        </span>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span style="color: ${colorScore}; font-weight: bold; text-shadow: 0 0 5px rgba(0,0,0,0.8);">${score.toFixed(2)}%</span>
+                            <button class="btn-mini" onclick="autoAlign(${filesData.indexOf(file)}, ${tuningStandards.indexOf(activeGrid)})" style="padding: 2px 6px; font-size: 1rem; background: #222; color:#00d2ff; border:1px solid #00d2ff; border-radius:4px; cursor:pointer; transition:0.2s;" onmouseover="this.style.background='#00d2ff'; this.style.color='#000';" onmouseout="this.style.background='#222'; this.style.color='#00d2ff';" title="Find optimal alignment shift (Affected by Smooth Lvl)">🧲 Snap</button>
+                        </div>
+                    </div>
+                    <div style="width: 100%; height: 6px; background: #080808; border-radius: 3px; overflow: hidden; border: 1px solid #333;">
+                        <div style="width: ${score.toFixed(2)}%; height: 100%; background: linear-gradient(90deg, ${file.colorAlphaLight}, ${file.color}); transition: width 0.3s ease-out;"></div>
+                    </div>
+                </div>`;
+            });
+        });
+
+        const isCollapsed = container.getAttribute('data-collapsed') === 'true';
+        container.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer; background:#222; padding:8px 15px; border-radius:5px; border:1px solid #444; margin-bottom: ${isCollapsed ? '0' : '10px'}; transition: 0.2s;" 
+                 onclick="document.getElementById('alignment-meters-container').setAttribute('data-collapsed', '${isCollapsed ? 'false' : 'true'}'); renderGraph();"
+                 onmouseover="this.style.background='#333'" onmouseout="this.style.background='#222'">
+                <span style="font-weight:bold; color:#00d2ff; font-family:'Segoe UI Mono', monospace; font-size:1.1rem; letter-spacing:1px;">🎯 ALIGNMENT METERS</span>
+                <span style="color:#aaa; font-weight:bold; font-size:1.1rem;">${isCollapsed ? '▶ SHOW' : '▼ HIDE'}</span>
+            </div>
+            <div id="alignment-meters-content" style="display: ${isCollapsed ? 'none' : 'block'};">
+                ${html}
+            </div>
+        `;
+    }
+</script>
+    
+    
+
+    <!-- Proof of Tuning Modal -->
+    <div id="proof-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="toggleProofModal()">&times;</span>
+            <h2 style="color:#e0e0e0; margin-top:0;">🔬 Tuning Standards Verification</h2>
+            <p style="color:#888; font-size: 1.05rem;">This window displays the exact cent offsets used for calculation compared to C (0 cents). Pure intervals are derived from high-precision ratios.</p>
+            
+            <div id="proof-table-container"></div>
+        </div>
+    </div>
+    
+
+    <!-- EXPORT MODAL -->
+    <div id="export-modal" class="modal">
+        <div class="modal-content" style="max-width: 650px; text-align: center; border-color: #00d2ff; padding: 40px;">
+            <span class="close-btn" onclick="document.getElementById('export-modal').style.display='none'">&times;</span>
+            <h2 style="color:#00d2ff; margin-top:0; font-size: 2.2rem;">💾 Export Modified Media</h2>
+            <div style="height: 15px;"></div>
+
+            <div style="margin-bottom: 15px; text-align: left;">
+                <label style="color: #fff; font-weight: bold; font-size: 1.25rem;">Format:</label><br>
+                <select id="export-format" onchange="toggleImageUpload()" style="width: 100%; padding: 12px; font-size: 1.1rem; background: #222; color: #fff; border: 1px solid #555; border-radius: 6px; margin-top: 8px; cursor: pointer;">
+                    <option value="wav">WAV (Lossless Audio)</option>
+                    <option value="mp3">MP3 (Compressed Audio)</option>
+                    <option value="mp4">MP4 (Video w/ Static Image)</option>
+                    <option value="webm">WebM (Video w/ Static Image)</option>
+                </select>
+            </div>
+
+            <div id="image-upload-section" style="display: none; margin-bottom: 15px; text-align: left;">
+                <label style="color: #00ff41; font-weight: bold; font-size: 1.25rem;">Background Image (Required):</label><br>
+                <input type="file" id="export-image" accept="image/*" style="width: 100%; margin-top: 8px; color: #ccc; font-size: 1.1rem; padding: 5px 0; cursor: pointer;">
+            </div>
+
+            <button id="btn-start-export" onclick="startExport()" style="width: 100%; padding: 18px; background: #00d2ff; color: #000; font-weight: bold; font-size: 1.3rem; border: none; border-radius: 6px; cursor: pointer; margin-top: 25px; transition: 0.2s;">
+                🚀 Render & Download
+            </button>
+            <div id="export-status" style="margin-top: 25px; color: #fff; font-family: monospace; font-size: 1.25rem; word-break: break-word; min-height: 25px;"></div>
+            <div class="progress-bar" style="display:none; margin-top: 10px;" id="export-progress-bar">
+                <div class="progress-fill" id="export-progress-fill" style="width: 0%; background-color: #00d2ff;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // --- EXPORT LOGIC (V53 Addition) ---
+    function openExportModal() {
+        if (!currentAudioBuffer) {
+            alert("Please load an audio file first.");
+            return;
+        }
+        document.getElementById('export-modal').style.display = 'block';
+        document.getElementById('export-status').innerText = '';
+        document.getElementById('export-progress-bar').style.display = 'none';
+        toggleImageUpload();
+    }
+
+    function toggleImageUpload() {
+        const fmt = document.getElementById('export-format').value;
+        const imgSec = document.getElementById('image-upload-section');
+        const showImg = (fmt === 'mp4' || fmt === 'webm');
+        imgSec.style.display = showImg ? 'block' : 'none';
+        
+    }
+
+    // High Precision 32-bit Float WAV Encoder
+    function audioBufferToWav(buffer) {
+        let numOfChan = buffer.numberOfChannels;
+        // 32-bit float requires 4 bytes per sample (instead of 2)
+        let length = buffer.length * numOfChan * 4 + 44; 
+        let out = new ArrayBuffer(length);
+        let view = new DataView(out);
+        let channels =[];
+        let pos = 0;
+
+        function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
+        function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
+
+        setUint32(0x46464952); // "RIFF"
+        setUint32(length - 8); // file length - 8
+        setUint32(0x45564157); // "WAVE"
+        setUint32(0x20746d66); // "fmt " chunk
+        setUint32(16); // length = 16
+        setUint16(3); // CHANGE: 3 = IEEE 32-bit Float (1 was PCM Integer)
+        setUint16(numOfChan);
+        setUint32(buffer.sampleRate);
+        setUint32(buffer.sampleRate * 4 * numOfChan); // avg. bytes/sec (4 bytes per sample)
+        setUint16(numOfChan * 4); // block-align (4 bytes per sample)
+        setUint16(32); // CHANGE: 32-bit depth
+        setUint32(0x61746164); // "data" - chunk
+        setUint32(length - pos - 4); // chunk length
+
+        for (let i = 0; i < buffer.numberOfChannels; i++) channels.push(buffer.getChannelData(i));
+
+        let offset = 0;
+        while (pos < length) {
+            for (let i = 0; i < numOfChan; i++) {
+                // CHANGE: Directly write the 32-bit float without clamping or converting to integer
+                view.setFloat32(pos, channels[i][offset] || 0, true);
+                pos += 4;
+            }
+            offset++;
+        }
+        return new Blob([view], { type: "audio/wav" });
+    }
+
+    async function startExport() {
+        const format = document.getElementById('export-format').value;
+        let imageFile = null;
+
+        if (format === 'mp4' || format === 'webm') {
+            const imgInput = document.getElementById('export-image');
+            if (!imgInput.files || imgInput.files.length === 0) {
+                alert("Please select a background image to render the video.");
+                return;
+            }
+            imageFile = imgInput.files[0];
+            
+            if (!window.VideoEncoder || !window.AudioEncoder) {
+                alert("Your browser does not support the WebCodecs API required for offline video rendering. Please use a modern browser (Chrome/Edge) or export as WAV/MP3.");
+                return;
+            }
+        }
+
+        const btn = document.getElementById('btn-start-export');
+        const status = document.getElementById('export-status');
+        const pBar = document.getElementById('export-progress-bar');
+        const pFill = document.getElementById('export-progress-fill');
+
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+        pBar.style.display = 'block';
+        pFill.style.width = '0%';
+
+        try {
+            const shiftAllToggle = document.getElementById('shift-all-toggle');
+            const shiftAll = shiftAllToggle ? shiftAllToggle.checked : true;
+            
+            let targetFiles = [];
+            if (shiftAll && filesData && filesData.length > 0) {
+                targetFiles = filesData.filter(f => f.buffer && f.visible);
+            } else {
+                const activeFile = filesData.find(f => f.buffer === currentAudioBuffer && f.visible);
+                if (activeFile) targetFiles.push(activeFile);
+            }
+            if (targetFiles.length === 0) throw new Error("No valid files to export.");
+
+            const ratio = Math.pow(2, calibrationCents / 1200);
+            let speedStr = calibrationCents >= 0 ? "+" : "";
+            speedStr += calibrationCents.toFixed(2) + "ct";
+
+            for (let fIdx = 0; fIdx < targetFiles.length; fIdx++) {
+                const fileObj = targetFiles[fIdx];
+                const buf = fileObj.buffer;
+                const originalName = fileObj.name.substring(0, fileObj.name.lastIndexOf('.')) || fileObj.name;
+                window.exportFilePrefix = targetFiles.length > 1 ? `[File ${fIdx + 1}/${targetFiles.length}] ` : ``;
+                
+                pFill.style.width = '0%';
+                status.innerText = window.exportFilePrefix + "Step 1: Rendering exact varispeed math offline...";
+                
+                let targetSampleRate = buf.sampleRate;
+                if (format === 'webm' || format === 'mp4') {
+                    targetSampleRate = 48000;
+                } else if (format === 'mp3' && targetSampleRate > 48000) {
+                    targetSampleRate = 48000;
+                    status.innerText = window.exportFilePrefix + "Downsampling to 48kHz for MP3 compatibility...";
+                }
+                const targetLength = Math.ceil((buf.length / buf.sampleRate) * targetSampleRate / ratio);
+                
+                const offlineCtx = new OfflineAudioContext(buf.numberOfChannels, targetLength, targetSampleRate);
+                const source = offlineCtx.createBufferSource();
+                source.buffer = buf;
+                source.playbackRate.value = ratio;
+                source.connect(offlineCtx.destination);
+                source.start();
+                
+                const renderedBuffer = await offlineCtx.startRendering();
+                status.innerText = window.exportFilePrefix + "Step 2: Audio logic processed.";
+                pFill.style.width = '15%';
+                
+                let finalBlob = null;
+                let extension = format;
+
+            // --- WAV EXPORT ---
+            if (format === 'wav') {
+                status.innerText = window.exportFilePrefix + "Step 3: Encoding raw audio to WAV...";
+                finalBlob = audioBufferToWav(renderedBuffer);
+            } 
+            // --- MP3 EXPORT ---
+            else if (format === 'mp3') {
+                status.innerText = window.exportFilePrefix + "Step 3: Encoding to MP3 natively (Offline)...";
+                const numOfChan = renderedBuffer.numberOfChannels;
+                const sampleRate = renderedBuffer.sampleRate;
+                
+                const mp3encoder = new window.lamejs.Mp3Encoder(numOfChan, sampleRate, 320);
+                const mp3Data = [];
+                const sampleBlockSize = 1152;
+                
+                const left = renderedBuffer.getChannelData(0);
+                const right = numOfChan > 1 ? renderedBuffer.getChannelData(1) : left;
+                
+                const left16 = new Int16Array(left.length);
+                const right16 = new Int16Array(right.length);
+                for (let i = 0; i < left.length; i++) {
+                    left16[i] = Math.max(-32768, Math.min(32767, left[i] * 32768));
+                    right16[i] = Math.max(-32768, Math.min(32767, right[i] * 32768));
+                }
+                
+                for (let i = 0; i < left16.length; i += sampleBlockSize) {
+                    const leftChunk = left16.subarray(i, i + sampleBlockSize);
+                    let mp3buf = (numOfChan === 1) ? 
+                        mp3encoder.encodeBuffer(leftChunk) : 
+                        mp3encoder.encodeBuffer(leftChunk, right16.subarray(i, i + sampleBlockSize));
+                    
+                    if (mp3buf.length > 0) mp3Data.push(mp3buf);
+                    if (i % (sampleBlockSize * 100) === 0) {
+                        pFill.style.width = (15 + Math.round((i / left16.length) * 80)) + '%';
+                        await new Promise(r => { const mc = new MessageChannel(); mc.port1.onmessage=r; mc.port2.postMessage(null); }); // Yield to event loop to unblock UI
+                    }
+                }
+                
+                const flushBuf = mp3encoder.flush();
+                if (flushBuf.length > 0) mp3Data.push(flushBuf);
+                
+                finalBlob = new Blob(mp3Data, { type: 'audio/mpeg' });
+            } 
+            // --- MP4 / WEBM (WEBCODECS API) ---
+            else if (format === 'mp4' || format === 'webm') {
+                status.innerText = window.exportFilePrefix + "Step 3: Initializing Native Video Engine...";
+                
+                // 1. Prepare Background Image Canvas
+                const imgObj = new Image();
+                const objUrl = URL.createObjectURL(imageFile);
+                imgObj.src = objUrl;
+                await new Promise((res, rej) => { imgObj.onload = res; imgObj.onerror = rej; });
+                URL.revokeObjectURL(objUrl); // Free memory buffer
+                
+                const canvas = document.createElement('canvas');
+                // Ensure dimensions are multiples of 16 (hardware encoders crash otherwise)
+                canvas.width = Math.floor(imgObj.width / 16) * 16;
+                canvas.height = Math.floor(imgObj.height / 16) * 16;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(imgObj, 0, 0, canvas.width, canvas.height);
+
+                // 2. Setup Codecs & Fallbacks
+                let muxer = null;
+                let vCodec = '';
+                let aCodec = '';
+                let mp4AudioMuxerCodec = 'aac';
+                const encSampleRate = renderedBuffer.sampleRate; // Guaranteed 48k for video formats
+
+                if (format === 'mp4') {
+                    vCodec = 'avc1.42E01F'; // H.264 Constrained Baseline (Best for Firefox/OpenH264)
+                    aCodec = 'mp4a.40.2';   // AAC
+                    
+                    // Fallback to Opus if AAC is unsupported by browser (e.g., Firefox, some Linux Chromium)
+                    const aacSupport = await AudioEncoder.isConfigSupported({ 
+                        codec: aCodec, 
+                        numberOfChannels: renderedBuffer.numberOfChannels, 
+                        sampleRate: encSampleRate,
+                        bitrate: 128_000 * renderedBuffer.numberOfChannels
+                    });
+                    
+                    if (!aacSupport.supported) {
+                        console.warn("AAC encoding not supported natively, falling back to Opus in MP4");
+                        aCodec = 'opus';
+                        mp4AudioMuxerCodec = 'opus';
+                    }
+
+                    muxer = new window.Mp4Muxer.Muxer({
+                        target: new window.Mp4Muxer.ArrayBufferTarget(),
+                        video: { codec: 'avc', width: canvas.width, height: canvas.height },
+                        audio: { codec: mp4AudioMuxerCodec, numberOfChannels: renderedBuffer.numberOfChannels, sampleRate: encSampleRate },
+                        fastStart: 'in-memory'
+                    });
+                } else {
+                    vCodec = 'vp09.00.10.08';
+                    aCodec = 'opus';
+                    muxer = new window.WebMMuxer.Muxer({
+                        target: new window.WebMMuxer.ArrayBufferTarget(),
+                        video: { codec: 'V_VP9', width: canvas.width, height: canvas.height },
+                        audio: { codec: 'A_OPUS', numberOfChannels: renderedBuffer.numberOfChannels, sampleRate: encSampleRate }
+                    });
+                }
+
+                let encError = null;
+                let firstVideoChunk = false;
+
+                // 3. Setup Video Encoder
+                const videoEncoder = new VideoEncoder({
+                    output: (chunk, meta) => {
+                        if (encError) return;
+                        if (!firstVideoChunk) {
+                            firstVideoChunk = true;
+                            // Fast-Fail: If the encoder strips SPS/PPS headers, abort instantly!
+                            if (format === 'mp4' && (!meta || !meta.decoderConfig)) {
+                                encError = new Error("Browser H.264 encoder is broken (missing decoderConfig). Please select 'WebM' format instead.");
+                                return;
+                            }
+                        }
+                        try {
+                            let safeChunk = chunk;
+                            // Check if the browser's encoder stripped the duration metadata
+                            if (chunk.duration == null || isNaN(chunk.duration) || chunk.duration < 0) {
+                                const chunkData = new Uint8Array(chunk.byteLength);
+                                chunk.copyTo(chunkData);
+                                safeChunk = new EncodedVideoChunk({
+                                    type: chunk.type,
+                                    timestamp: chunk.timestamp,
+                                    duration: 1_000_000, // Force 1-second duration
+                                    data: chunkData
+                                });
+                            }
+                            muxer.addVideoChunk(safeChunk, meta);
+                        } catch(e) {
+                            encError = e;
+                        }
+                    },
+                    error: e => { encError = e; console.error("Video Encoder Error:", e); }
+                });
+                
+                const vConfig = { 
+                    codec: vCodec, 
+                    width: canvas.width, 
+                    height: canvas.height, 
+                    bitrate: 2_000_000, 
+                    framerate: 1,
+                    hardwareAcceleration: 'prefer-software' // Bypasses buggy hardware encoders on Linux/Firefox
+                };
+                if (format === 'mp4') {
+                    vConfig.avc = { format: 'avc' }; // Must be standard avc for mp4-muxer
+                }
+                const vSupport = await VideoEncoder.isConfigSupported(vConfig);
+                if (!vSupport.supported) {
+                    throw new Error(`Video encoding config not supported (${vCodec} at ${canvas.width}x${canvas.height}). Please resize your image or try a different format.`);
+                }
+                videoEncoder.configure(vConfig);
+
+                // 4. Setup Audio Encoder
+                const audioEncoder = new AudioEncoder({
+                    output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+                    error: e => { encError = e; console.error("Audio Encoder Error:", e); }
+                });
+                
+                const aConfig = { 
+                    codec: aCodec, 
+                    numberOfChannels: renderedBuffer.numberOfChannels, 
+                    sampleRate: encSampleRate, 
+                    bitrate: 128_000 * renderedBuffer.numberOfChannels 
+                };
+                
+                const aSupport = await AudioEncoder.isConfigSupported(aConfig);
+                if (!aSupport.supported) {
+                    throw new Error(`Audio encoding config not supported (${aCodec} @ ${encSampleRate}Hz). Your browser/OS lacks required encoders. Please try exporting as WAV.`);
+                }
+                audioEncoder.configure(aConfig);
+
+                status.innerText = window.exportFilePrefix + "Step 4: Multiplexing Video (1 frame per second)...";
+                
+                // --- Encode Audio Chunks ---
+                const numChan = renderedBuffer.numberOfChannels;
+                const totalFrames = renderedBuffer.length;
+                const framesPerChunk = renderedBuffer.sampleRate; // 1 second chunks
+                
+                for (let i = 0; i < totalFrames; i += framesPerChunk) {
+                    const chunkFrames = Math.min(framesPerChunk, totalFrames - i);
+                    
+                    // Format into planar f32 layout
+                    const data = new Float32Array(chunkFrames * numChan);
+                    for (let c = 0; c < numChan; c++) {
+                        data.set(renderedBuffer.getChannelData(c).subarray(i, i + chunkFrames), c * chunkFrames);
+                    }
+                    
+                    const audioData = new AudioData({
+                        format: 'f32-planar',
+                        sampleRate: renderedBuffer.sampleRate,
+                        numberOfFrames: chunkFrames,
+                        numberOfChannels: numChan,
+                        timestamp: (i / renderedBuffer.sampleRate) * 1_000_000,
+                        data: data
+                    });
+                    
+                    if (encError) throw encError;
+                    audioEncoder.encode(audioData);
+                    audioData.close();
+                    
+                    // Yield to event loop to prevent QuotaExceededError crashes
+                    while (audioEncoder.encodeQueueSize > 5) { 
+                        if (encError) throw encError;
+                        await new Promise(r => { const mc = new MessageChannel(); mc.port1.onmessage=r; mc.port2.postMessage(null); }); 
+                    }
+                    
+                    if (i % (framesPerChunk * 5) === 0) pFill.style.width = (15 + Math.round((i / totalFrames) * 40)) + '%';
+                }
+
+                // --- Encode Video Frames (Static image -> 1 frame per second) ---
+                const totalSeconds = Math.ceil(renderedBuffer.duration);
+                for(let sec = 0; sec < totalSeconds; sec++) {
+                    if (encError) throw encError;
+                    const frame = new VideoFrame(canvas, { timestamp: sec * 1_000_000, duration: 1_000_000 });
+                    videoEncoder.encode(frame, { keyFrame: (sec % 5 === 0) });
+                    frame.close();
+                    
+                    // Yield to event loop to prevent QuotaExceededError crashes
+                    while (videoEncoder.encodeQueueSize > 5) { 
+                        if (encError) throw encError;
+                        await new Promise(r => { const mc = new MessageChannel(); mc.port1.onmessage=r; mc.port2.postMessage(null); }); 
+                    }
+                    
+                    if (sec % 5 === 0) pFill.style.width = (55 + Math.round((sec / totalSeconds) * 40)) + '%';
+                }
+
+                status.innerText = window.exportFilePrefix + "Step 5: Finalizing Container...";
+                if (encError) throw encError;
+                await audioEncoder.flush();
+                audioEncoder.close(); // [PATCH] Free hardware resource
+                if (encError) throw encError;
+                await videoEncoder.flush();
+                videoEncoder.close(); // [PATCH] Free hardware resource
+                if (encError) throw encError;
+                
+                muxer.finalize();
+                
+                finalBlob = new Blob([muxer.target.buffer], { type: format === 'mp4' ? 'video/mp4' : 'video/webm' });
+            }
+
+                status.innerText = window.exportFilePrefix + "Finalizing download...";
+
+                const downloadUrl = URL.createObjectURL(finalBlob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = `${originalName}_Transformed_${speedStr}.${extension}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(downloadUrl), 10000); // PATCH: Prevent browser download cancellation race condition
+                
+                // Yield and give the browser a second to process the download dialog before moving to next file
+                if (fIdx < targetFiles.length - 1) {
+                    await new Promise(r => setTimeout(r, 1500));
+                }
+            } // END OF FOR LOOP
+
+            status.innerText = "✅ All Exports Complete!";
+            status.style.color = "#00ff41";
+            pFill.style.width = '100%';
+
+        } catch (err) {
+            console.error(err);
+            let msg = err.message || String(err);
+            status.innerText = "❌ Error during export: " + msg;
+            status.style.color = "#ff4444";
+        } finally {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+        }
+    }
+
+    </script>
+</body>
+    
+</html>
