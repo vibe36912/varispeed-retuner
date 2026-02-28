@@ -1,6 +1,6 @@
 # Varispeed Retuner
 
-A web-based tool for adjusting the pitch and speed of audio files and aligning them to different tuning standards.
+A web-based tool for adjusting the playback speed of audio files to shift their pitch and align them with different tuning standards.
 
 ## Features
 * **Import:** Drag and drop media files (WAV, MP3, MP4, WebM).
