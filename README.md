@@ -10,7 +10,7 @@ A web-based tool for adjusting the pitch and speed of audio files and aligning t
 * **Export:** Save the modified audio as WAV or MP3, or render it as a video (MP4/WebM) with a static background image.
 
 ## Usage
-No installation or backend is required. Simply open the `index.html` file in any modern web browser (Chrome/Edge recommended for video export support). 
+No installation or backend is required. Simply open the `index.html` file in any modern web browser. 
 
 ## Dependencies
 The tool runs entirely client-side and fetches the following libraries via CDN for media export:
